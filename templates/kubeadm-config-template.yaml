@@ -4,6 +4,12 @@
 #
 # Identique à la section joinConfiguration du KubeadmControlPlaneTemplate
 # mais pour les workers. Le patch WorkerNodeSetup.yaml injecte les SSH keys.
+#
+# /etc/hosts : le hostname de la VM (ex: k3s-app-worker-xxxx) n'est enregistré
+# dans AUCUN DNS en homelab, et l'image Packer ne le pré-remplit pas dans
+# /etc/hosts non plus → tout composant qui résout son propre hostname en local
+# échoue ("no such host"). Voir kubeadm-control-plane-template.yaml pour le
+# détail du symptôme (vécu et corrigé le 2026-06-16).
 # =============================================================================
 kind: KubeadmConfigTemplate
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
@@ -12,6 +18,9 @@ metadata:
 spec:
   template:
     spec:
+      preKubeadmCommands:
+      - echo "$(ip -4 addr show ens18 | grep -oP 'inet \K[\d.]+' | head -1) $(hostname)" >> /etc/hosts
+
       joinConfiguration:
         nodeRegistration:
           kubeletExtraArgs:
