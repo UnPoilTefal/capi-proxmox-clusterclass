@@ -16,6 +16,15 @@
 # ipv4Config : ce champ est requis par l'API CAPMOX mais les IPs réelles
 #   sont allouées depuis l'InClusterIPPool "clusterclass-ipv4".
 #   → adapter le range si tu déplaces le projet vers un autre sous-réseau.
+#
+# credentialsRef : référence vers le Secret contenant les credentials API Proxmox.
+#   Sans namespace explicite, le CRD résout dans le même namespace que le
+#   ProxmoxCluster (toujours caprox-kubernetes-engine ici) — donc le Secret
+#   "capmox-manager-credentials" doit exister DANS CE NAMESPACE (en plus de
+#   l'instance dans proxmox-infrastructure-system utilisée par le provider lui-même).
+#   Sans ce champ, le contrôleur échoue avec "No credentials found, ProxmoxCluster
+#   missing credentialsRef" — il n'y a pas de fallback global fonctionnel dans
+#   cette installation (Cluster API Operator, sans flag de credential par défaut).
 # =============================================================================
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: ProxmoxClusterTemplate
@@ -24,6 +33,9 @@ metadata:
 spec:
   template:
     spec:
+      credentialsRef:
+        name: capmox-manager-credentials
+
       # Optimisation mémoire : 0 = la VM utilise exactement la RAM configurée
       # (pas de ballooning Proxmox). À ajuster si tu manques de RAM sur les hosts.
       schedulerHints:
