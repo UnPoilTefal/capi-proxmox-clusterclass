@@ -37,7 +37,7 @@
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: KubeadmControlPlaneTemplate
 metadata:
-  name: proxmox-kubernetes-engine-v2
+  name: proxmox-kubernetes-engine-v3
 spec:
   template:
     spec:
