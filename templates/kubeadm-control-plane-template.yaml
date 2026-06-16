@@ -19,6 +19,14 @@
 #   En mode ARP, il annonce l'IP VIP (controlPlaneEndpoint.host) via gratuitous ARP.
 #   Si le nœud CP leader tombe, kube-vip élira un nouveau leader et re-annoncera l'IP.
 #   → Prérequis : l'IP VIP doit être HORS du pool IPAM et de tout autre usage.
+#
+# kubelet-preferred-address-types :
+#   Par défaut, kube-apiserver contacte les kubelets en préférant l'adresse de
+#   type "Hostname" (ordre par défaut : Hostname,InternalDNS,InternalIP,...).
+#   En homelab, le hostname de la VM (ex: mgmt-control-plane-xxxx) n'existe dans
+#   AUCUN DNS → "no such host", et les health checks etcd / cert-expiry échouent
+#   en boucle (Cluster reste Available=Unknown indéfiniment).
+#   → Forcer InternalIP en premier, vécu et corrigé le 2026-06-16.
 # =============================================================================
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: KubeadmControlPlaneTemplate
@@ -28,6 +36,12 @@ spec:
   template:
     spec:
       kubeadmConfigSpec:
+        clusterConfiguration:
+          apiServer:
+            extraArgs:
+            - name: kubelet-preferred-address-types
+              value: InternalIP,Hostname,ExternalIP
+
         files:
         # Fichier factice : le contrôleur CAPI requiert que files[] soit non vide.
         # On lui donne /dev/null comme cible sans effet de bord.
