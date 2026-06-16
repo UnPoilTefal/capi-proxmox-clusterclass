@@ -92,16 +92,23 @@ spec:
         - /etc/kube-vip-prepare.sh
 
         # Configuration kubeadm init (premier nœud CP uniquement)
+        #
+        # PAS de provider-id ici (vécu et corrigé le 2026-06-16) :
+        #   CAPMOX (ionos-cloud/cluster-api-provider-proxmox) proposait de le
+        #   définir au format proxmox://<uuid cloud-init>, mais le CCM utilisé
+        #   ici (sergelogvinov/proxmox-cloud-controller-manager) attend le
+        #   format proxmox://<region>/<vmid Proxmox numérique> et découvre lui
+        #   -même la VM par correspondance de HOSTNAME via l'API Proxmox.
+        #   spec.providerID est IMMUTABLE une fois posé (seulement ""→valeur) :
+        #   si kubelet le fixe au mauvais format, le CCM ne peut JAMAIS le
+        #   corriger → le node reste sans IP interne et sans taint levée
+        #   indéfiniment ("cloud-provider uninitialized" pour toujours).
         initConfiguration:
           nodeRegistration:
             kubeletExtraArgs:
-            # provider-id : identifiant unique de la VM dans le cloud provider.
-            # Requis par le CCM Proxmox pour mapper les nœuds K8s aux VMs Proxmox.
-            # {{ ds.meta_data.instance_id }} = instance-id cloud-init (UUID Proxmox)
-            - name: provider-id
-              value: "proxmox://'{{ ds.meta_data.instance_id }}'"
             # cloud-provider: external = désactive le cloud controller intégré kubeadm
-            # et délègue au CCM Proxmox (déployé par HelmChartProxy ccm)
+            # et délègue au CCM Proxmox (déployé par HelmChartProxy ccm), qui
+            # assigne lui-même providerID + InternalIP par découverte hostname.
             - name: cloud-provider
               value: external
 
@@ -109,8 +116,6 @@ spec:
         joinConfiguration:
           nodeRegistration:
             kubeletExtraArgs:
-            - name: provider-id
-              value: "proxmox://'{{ ds.meta_data.instance_id }}'"
             - name: cloud-provider
               value: external
 

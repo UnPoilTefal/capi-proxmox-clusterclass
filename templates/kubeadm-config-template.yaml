@@ -21,10 +21,10 @@ spec:
       preKubeadmCommands:
       - echo "$(ip -4 addr show ens18 | grep -oP 'inet \K[\d.]+' | head -1) $(hostname)" >> /etc/hosts
 
+      # PAS de provider-id (voir kubeadm-control-plane-template.yaml pour le
+      # détail) : le CCM sergelogvinov le découvre lui-même par hostname.
       joinConfiguration:
         nodeRegistration:
           kubeletExtraArgs:
-          - name: provider-id
-            value: "proxmox://'{{ ds.meta_data.instance_id }}'"
           - name: cloud-provider
             value: external
