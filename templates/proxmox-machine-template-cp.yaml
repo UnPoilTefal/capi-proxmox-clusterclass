@@ -43,7 +43,7 @@
 kind: ProxmoxMachineTemplate
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 metadata:
-  name: proxmox-clusterclass-v0.1.0-control-plane-template
+  name: proxmox-clusterclass-v0.1.1-control-plane-template
 spec:
   template:
     spec:

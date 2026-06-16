@@ -59,7 +59,7 @@ spec:
       templateRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
         kind: ProxmoxMachineTemplate
-        name: proxmox-clusterclass-v0.1.0-control-plane-template
+        name: proxmox-clusterclass-v0.1.1-control-plane-template
     # Pattern de nommage des nœuds CP dans Proxmox/K8s
     naming:
       template: '{{ .cluster.name }}-control-plane-{{ .random }}'
@@ -89,7 +89,7 @@ spec:
         templateRef:
           apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
           kind: ProxmoxMachineTemplate
-          name: proxmox-clusterclass-v0.1.0-workertemplate
+          name: proxmox-clusterclass-v0.1.1-workertemplate
       bootstrap:
         templateRef:
           apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
