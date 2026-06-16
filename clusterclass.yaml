@@ -1,0 +1,138 @@
+# =============================================================================
+# ClusterClass — le "blueprint" de cluster réutilisable
+# =============================================================================
+#
+# CONCEPT CAPI ClusterTopology :
+#   Un ClusterClass définit la STRUCTURE d'un cluster (control-plane, workers,
+#   infrastructure) sans les valeurs spécifiques. Les valeurs sont injectées
+#   au moment de la création d'un Cluster CR via des "variables" + "patches".
+#
+#   Analogie : ClusterClass = classe d'objet, Cluster CR = instance.
+#
+# FLUX DE RECONCILIATION :
+#   Cluster CR (variables) ──→ ClusterClass (patches) ──→ Templates expandés
+#                                                            ↓
+#                                           CAPMOX crée des VMs sur Proxmox
+#                                           kubeadm bootstrap le cluster K8s
+#                                           HelmChartProxy installe la CNI/CSI/CCM
+#
+# SOURCE : adapté de https://github.com/Caprox-eu/Proxmox-Kubernetes-Engine (v0.0.4)
+# MODIFICATIONS : CNI remplacée par Calico (voir templates/cni/)
+#
+# VERSION KUBE-VIP : ghcr.io/kube-vip/kube-vip:v1.0.0
+#   Définie à deux endroits — mettre à jour les deux ensemble :
+#     patches/KubeadmControlPlaneTemplate/ControlPlaneSetup.yaml  → pod statique CP
+#     templates/svc-lb/sources/kube-vip-svc-lb.yaml              → DaemonSet service LB
+# =============================================================================
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: ClusterClass
+metadata:
+  name: proxmox-clusterclass-cilium-v0.1.0
+  # Nom conservé de l'upstream pour faciliter la comparaison.
+  # Le nom contient "cilium" mais la CNI est configurée via HelmChartProxy
+  # (voir templates/cni/) — ce fichier est CNI-agnostique.
+spec:
+
+  # ---------------------------------------------------------------------------
+  # INFRASTRUCTURE : définit quel type de "cluster infra" provisionner
+  # CAPMOX utilise ProxmoxClusterTemplate comme "factory" pour créer
+  # l'objet ProxmoxCluster de chaque instance de cluster.
+  # ---------------------------------------------------------------------------
+  infrastructure:
+    templateRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+      kind: ProxmoxClusterTemplate
+      name: proxmox-clusterclass-cilium-v0.1.0-clustertemplate
+
+  # ---------------------------------------------------------------------------
+  # CONTROL PLANE : définit comment bootstrapper les nœuds masters
+  # KubeadmControlPlaneTemplate orchestre kubeadm init/join + kube-vip (VIP).
+  # ProxmoxMachineTemplate définit la spec VM Proxmox des nœuds CP.
+  # ---------------------------------------------------------------------------
+  controlPlane:
+    templateRef:
+      apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+      kind: KubeadmControlPlaneTemplate
+      name: proxmox-kubernetes-engine
+    machineInfrastructure:
+      templateRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        name: proxmox-clusterclass-v0.1.0-control-plane-template
+    # Pattern de nommage des nœuds CP dans Proxmox/K8s
+    naming:
+      template: '{{ .cluster.name }}-control-plane-{{ .random }}'
+    # Health check : 900s pour démarrer, considéré unhealthy après 300s
+    # sans état "Ready=True" ou "Ready=Unknown"
+    healthCheck:
+      checks:
+        nodeStartupTimeoutSeconds: 900
+        unhealthyNodeConditions:
+        - status: Unknown
+          timeoutSeconds: 300
+          type: Ready
+        - status: "False"
+          timeoutSeconds: 300
+          type: Ready
+
+  # ---------------------------------------------------------------------------
+  # WORKERS : définit les pools de nœuds workers (MachineDeployments)
+  # Un cluster peut avoir 0..N pools workers de la class "proxmox-worker".
+  # Pour un cluster sans workers séparés (masters = workers), on déclare
+  # simplement 0 replicas dans le Cluster CR.
+  # ---------------------------------------------------------------------------
+  workers:
+    machineDeployments:
+    - class: proxmox-worker
+      infrastructure:
+        templateRef:
+          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+          kind: ProxmoxMachineTemplate
+          name: proxmox-clusterclass-v0.1.0-workertemplate
+      bootstrap:
+        templateRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+          kind: KubeadmConfigTemplate
+          name: proxmox-kubernetes-engine-workertemplate
+      naming:
+        template: '{{ .cluster.name }}-worker-{{ .random }}'
+      # Labels automatiquement appliqués aux nœuds workers
+      metadata:
+        labels:
+          node-role.kubernetes.io/node: ""
+          topology.kubernetes.io/region: Datacenter
+      # Auto-remediation : redémarre si ≤33% des workers sont unhealthy
+      healthCheck:
+        checks:
+          nodeStartupTimeoutSeconds: 900
+          unhealthyNodeConditions:
+          - status: Unknown
+            timeoutSeconds: 300
+            type: Ready
+          - status: "False"
+            timeoutSeconds: 300
+            type: Ready
+        remediation:
+          triggerIf:
+            unhealthyLessThanOrEqualTo: 33%
+
+  # ---------------------------------------------------------------------------
+  # VARIABLES & PATCHES : le mécanisme de paramétrage du ClusterClass
+  #
+  # Les variables définissent les paramètres exposés (avec leur schema JSON).
+  # Les patches injectent les valeurs de ces variables dans les templates.
+  #
+  # Ces sections sont VIDES ici et remplies via Kustomize (kustomization.yaml).
+  # Chaque fichier dans variables/ et patches/ ajoute un élément à ces listes
+  # via des JSON patches de type "op: add path: /spec/variables/-".
+  #
+  # Variables disponibles (voir variables/*.yaml) :
+  #   - cloneSpec        : spec de clonage VM (template, CPU/RAM/disk/réseau, SSH)
+  #   - controlPlaneEndpoint : IP:port du VIP kube-apiserver (ex: 192.168.40.240:6443)
+  #   - allowedNodes     : liste des nœuds Proxmox autorisés (ex: [prox-node-01])
+  #   - dnsServers       : serveurs DNS pour les VMs (ex: [192.168.40.254])
+  #   - kubeProxy        : mode kube-proxy (iptables ou ipvs)
+  # ---------------------------------------------------------------------------
+  variables: []
+  patches: []

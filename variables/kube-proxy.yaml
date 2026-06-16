@@ -1,0 +1,17 @@
+# Variable kubeProxy — mode du proxy réseau K8s
+# iptables : mode par défaut, compatible avec toutes les configs
+# ipvs     : meilleure performance pour les clusters avec beaucoup de Services
+#            → nécessite ipvsadm sur les nœuds (déjà présent sur Ubuntu ≥ 22.04)
+- op: add
+  path: /spec/variables/-
+  value:
+    name: kubeProxy
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          mode:
+            type: string
+            default: "iptables"
+            enum: ["ipvs", "iptables"]

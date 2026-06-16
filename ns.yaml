@@ -1,0 +1,7 @@
+# Namespace dédié à la ClusterClass et aux ressources CAPI managées.
+# Tous les objets ClusterClass, Cluster, InClusterIPPool, HelmChartProxy
+# vivent dans ce namespace sur le cluster qui joue le rôle de management plane.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: caprox-kubernetes-engine

@@ -1,0 +1,18 @@
+# Variable allowedNodes — liste des nœuds Proxmox autorisés pour ce cluster
+#
+# CAPMOX répartit les VMs entre ces nœuds (round-robin).
+# → Pour un cluster HA à 3 CP, lister 3 nœuds pour garantir la distribution.
+# → Ex mgmt : [prox-node-04]
+# → Ex workload : [prox-node-01, prox-node-02, prox-node-03]
+- op: add
+  path: /spec/variables/-
+  value:
+    name: allowedNodes
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: array
+        items:
+          type: string
+        default: []
+        example: ["prox-node-01", "prox-node-02", "prox-node-03"]

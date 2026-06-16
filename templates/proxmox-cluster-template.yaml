@@ -1,0 +1,50 @@
+# =============================================================================
+# ProxmoxClusterTemplate — template d'infrastructure cluster Proxmox
+# =============================================================================
+#
+# RÔLE :
+#   CAPMOX instancie un ProxmoxCluster depuis ce template pour chaque Cluster CR.
+#   ProxmoxCluster représente le "côté Proxmox" du cluster K8s :
+#     - les nœuds Proxmox autorisés à accueillir des VMs
+#     - l'endpoint du kube-apiserver (VIP géré par kube-vip)
+#     - les DNS injectés dans cloud-init des VMs
+#
+# VALEURS DYNAMIQUES :
+#   controlPlaneEndpoint, allowedNodes et dnsServers sont injectés par le patch
+#   ProxmoxClusterTemplateGeneral.yaml depuis les variables du Cluster CR.
+#
+# ipv4Config : ce champ est requis par l'API CAPMOX mais les IPs réelles
+#   sont allouées depuis l'InClusterIPPool "clusterclass-ipv4".
+#   → adapter le range si tu déplaces le projet vers un autre sous-réseau.
+# =============================================================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: ProxmoxClusterTemplate
+metadata:
+  name: proxmox-clusterclass-cilium-v0.1.0-clustertemplate
+spec:
+  template:
+    spec:
+      # Optimisation mémoire : 0 = la VM utilise exactement la RAM configurée
+      # (pas de ballooning Proxmox). À ajuster si tu manques de RAM sur les hosts.
+      schedulerHints:
+        memoryAdjustment: 0
+
+      # Ces valeurs sont des placeholders — elles seront remplacées par le patch
+      # ProxmoxClusterTemplateGeneral.yaml depuis les variables controlPlaneEndpoint,
+      # allowedNodes et dnsServers du Cluster CR.
+      controlPlaneEndpoint:
+        host: 10.10.10.11   # remplacé par variable
+        port: 6443
+
+      dnsServers:
+      - 8.8.8.8              # remplacé par variable
+
+      # Plage IP "placebo" : requise par l'API mais pas utilisée pour l'allocation.
+      # L'IPAM réel est géré par l'InClusterIPPool "clusterclass-ipv4" référencé
+      # dans proxmox-machine-template-cp.yaml et proxmox-machine-template-worker.yaml.
+      # → garder cohérent avec ton subnet (192.168.40.0/24).
+      ipv4Config:
+        addresses:
+        - 192.168.40.2-192.168.40.20
+        prefix: 24
+        gateway: 192.168.40.254

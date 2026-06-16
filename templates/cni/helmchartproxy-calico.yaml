@@ -1,0 +1,60 @@
+# =============================================================================
+# HelmChartProxy — Calico CNI via Tigera Operator
+# =============================================================================
+#
+# CONCEPT HelmChartProxy (CAPI addon) :
+#   Cet objet tourne sur le MANAGEMENT cluster et surveille tous les Cluster CRs.
+#   Dès qu'un cluster porte le label "caprox.eu/cni: calico", CAPI Addon Controller
+#   installe automatiquement le chart Tigera Operator dans ce cluster workload.
+#   → pas besoin d'installer la CNI à la main après le bootstrap.
+#
+# CALICO VS CILIUM :
+#   Pour passer à Cilium, il suffit de :
+#     1. Désactiver ce fichier (le retirer de templates/cni/kustomization.yaml)
+#     2. Activer helmchartproxy-cilium.yaml dans templates/cni/kustomization.yaml
+#     3. Changer le label dans le Cluster CR :
+#          caprox.eu/cni: cilium   (au lieu de "calico")
+#     4. S'assurer que spec.clusterNetwork.pods.cidrBlocks n'est pas requis
+#        explicitement par Cilium (il le détecte depuis l'API server)
+#
+# PRÉREQUIS CALICO :
+#   Le Cluster CR doit définir spec.clusterNetwork.pods.cidrBlocks
+#   car Calico a besoin de connaître le pod CIDR au démarrage.
+#   → cluster.yaml des workload clusters définit podCIDR: 10.52.0.0/16
+#
+# TIGERA OPERATOR :
+#   Le chart `tigera-operator` installe l'opérateur qui crée ensuite les
+#   ressources Calico (Installation CR, FelixConfiguration, etc.).
+#   L'opérateur lit le podCIDR depuis le cluster et configure les ipPools Calico.
+# =============================================================================
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: calico
+spec:
+  # Sélecteur : cible uniquement les clusters avec ce label
+  clusterSelector:
+    matchLabels:
+      caprox.eu/cni: calico
+
+  releaseName: calico
+  chartName: tigera-operator
+  repoURL: https://docs.tigera.io/calico/charts
+  # Version du chart Tigera Operator → https://github.com/projectcalico/calico/releases
+  version: "v3.30.0"
+  namespace: tigera-operator
+
+  # valuesTemplate : template Go évalué avec les données du cluster cible.
+  # Ici on force le pod CIDR pour que l'Installation CR Calico l'utilise.
+  # {{ index .Cluster.spec.clusterNetwork.pods.cidrBlocks 0 }} récupère
+  # le premier CIDR défini dans le Cluster CR (ex: 10.52.0.0/16).
+  valuesTemplate: |
+    installation:
+      cni:
+        type: Calico
+      calicoNetwork:
+        ipPools:
+        - cidr: {{ index .Cluster.spec.clusterNetwork.pods.cidrBlocks 0 }}
+          encapsulation: VXLANCrossSubnet
+          natOutgoing: Enabled
+          nodeSelector: all()

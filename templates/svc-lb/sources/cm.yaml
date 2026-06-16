@@ -1,0 +1,21 @@
+# ConfigMap kube-vip cloud provider — plage d'IPs pour les Services LoadBalancer
+#
+# cidr-global : plage en notation CIDR pour les IPs LB de tous les namespaces.
+# 0.0.0.0/32 = placeholder (désactive l'allocation globale par défaut).
+#
+# → POUR TON HOMELAB : remplacer par ta plage LB, ex:
+#     cidr-global: 192.168.40.245/29   # donne .245-.252 (8 IPs)
+# OU utiliser range-global (start-end) :
+#     range-global: 192.168.40.245-192.168.40.247
+#
+# Note : ces IPs doivent être HORS du pool IPAM des nœuds et du VIP kube-vip CP.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubevip
+  namespace: kube-system
+data:
+  # Plage d'IPs pour les Services LoadBalancer — hors pool IPAM nœuds et hors VIP CP.
+  # range-global : start-end (recommandé pour les petites plages)
+  # cidr-global  : notation CIDR (ex: 192.168.40.245/29 → .245-.252)
+  range-global: 192.168.40.245-192.168.40.247

@@ -1,0 +1,17 @@
+- op: add
+  path: /spec/patches/-
+  value:
+    name: ControlPlaneMem
+    description: "Override RAM (MiB) des nœuds CP"
+    enabledIf: "{{ if .cloneSpec.machineSpec.controlPlane.memoryMiB }}true{{ end }}"
+    definitions:
+      - selector:
+          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+          kind: ProxmoxMachineTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+          - op: add
+            path: /spec/template/spec/memoryMiB
+            valueFrom:
+              variable: cloneSpec.machineSpec.controlPlane.memoryMiB

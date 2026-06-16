@@ -1,0 +1,69 @@
+# =============================================================================
+# ProxmoxMachineTemplate — spec VM pour les nœuds Control Plane
+# =============================================================================
+#
+# RÔLE :
+#   Décrit la VM Proxmox à cloner pour chaque nœud CP.
+#   CAPMOX clone le template Proxmox sélectionné par TAG (templateSelector.matchTags)
+#   et applique les overrides de spec (CPU/RAM/disk) via les patches du ClusterClass.
+#
+# SÉLECTION DU TEMPLATE PAR TAG :
+#   CAPMOX cherche dans Proxmox un template VM qui possède le tag correspondant
+#   à ce qui est défini dans la variable cloneSpec.vmTemplate.templateTag du Cluster CR.
+#   → Dans Proxmox UI : VM 9100 → Options → Tags → ajouter "v1-35-5"
+#   → Le Cluster CR doit avoir : cloneSpec.vmTemplate.templateTag: "v1-35-5"
+#   → Le patch ControlPlaneSetup.yaml injecte ce tag dans matchTags ci-dessous.
+#
+# IPAM :
+#   L'interface réseau référence l'InClusterIPPool "clusterclass-ipv4".
+#   Le contrôleur CAPI IPAM alloue une IP libre du pool à chaque VM créée.
+#   La gateway et le DNS sont configurés par cloud-init depuis ProxmoxCluster.
+#
+# VALEURS SURCHARGÉES PAR PATCHES (depuis variable cloneSpec du Cluster CR) :
+#   - templateSelector.matchTags → cloneSpec.vmTemplate.templateTag
+#   - numCores   → cloneSpec.machineSpec.controlPlane.numCores
+#   - memoryMiB  → cloneSpec.machineSpec.controlPlane.memoryMiB
+#   - numSockets → cloneSpec.machineSpec.controlPlane.numSockets
+#   - disks      → cloneSpec.machineSpec.controlPlane.disks
+#   - format     → cloneSpec.machineSpec.controlPlane.format
+#   - network    → cloneSpec.machineSpec.controlPlane.network (optionnel)
+#
+# PERSONNALISATION HOMELAB :
+#   Le bridge est passé à vmbr40 (VLAN 40, réseau K8s).
+#   Si tu veux surcharger le bridge par cluster, utilise la variable
+#   cloneSpec.machineSpec.controlPlane.network.default.bridge dans le Cluster CR.
+# =============================================================================
+kind: ProxmoxMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+metadata:
+  name: proxmox-clusterclass-v0.1.0-control-plane-template
+spec:
+  template:
+    spec:
+      # Sélection du template Proxmox par TAG (pas par ID ou nom).
+      # → Valeur remplacée par le patch ControlPlaneSetup.yaml
+      templateSelector:
+        matchTags:
+        - "v1-35-5"   # valeur par défaut, remplacée par la variable templateTag
+
+      # Format du disque cloné : qcow2 = format standard QEMU (COW, snapshots)
+      # Alternatives : raw (perf max, pas de snapshot), vmdk (VMware compat)
+      format: qcow2
+
+      # full: true = clone complet (indépendant du template source)
+      # false = linked clone (partage les blocs avec le template → risqué en prod)
+      full: true
+
+      # Configuration réseau principale de la VM
+      network:
+        networkDevices:
+        - name: net0          # nom du device réseau dans la VM (net0 = premier NIC)
+          bridge: vmbr40      # bridge Proxmox → VLAN 40 (192.168.40.0/24)
+          model: virtio       # driver réseau para-virtualisé (perf optimale)
+          # Référence à l'InClusterIPPool pour l'allocation d'IP dynamique.
+          # Le contrôleur IPAM attribue une IP libre du pool à chaque VM.
+          # → nom du pool défini dans ip-pool.yaml (mgmt ou workload selon contexte)
+          ipPoolRef:
+          - kind: InClusterIPPool
+            apiGroup: ipam.cluster.x-k8s.io
+            name: clusterclass-ipv4

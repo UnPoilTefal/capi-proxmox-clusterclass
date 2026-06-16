@@ -1,0 +1,37 @@
+# =============================================================================
+# HelmChartProxy — Cilium CNI (NON ACTIVÉ — voir kustomization.yaml)
+# =============================================================================
+#
+# Ce fichier est gardé pour référence et pour faciliter un éventuel switch
+# de Calico → Cilium. Il n'est PAS inclus dans templates/cni/kustomization.yaml.
+#
+# POUR ACTIVER CILIUM à la place de Calico :
+#   1. Dans templates/cni/kustomization.yaml, remplacer :
+#        resources:
+#        - helmchartproxy-calico.yaml
+#      par :
+#        resources:
+#        - helmchartproxy-cilium.yaml
+#        # - helmchartproxy-cilium-ipv6-dual-stack.yaml  # optionnel
+#
+#   2. Dans chaque Cluster CR (clusters/*/cluster.yaml), changer le label :
+#        caprox.eu/cni: cilium   (au lieu de "calico")
+#
+#   3. Retirer spec.clusterNetwork du Cluster CR si non nécessaire
+#      (Cilium configure son IPAM indépendamment par défaut)
+#
+# VERSION : 1.19.3 (helm chart Cilium — dernière version testée avec Caprox PKE)
+# =============================================================================
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: cilium
+spec:
+  clusterSelector:
+    matchLabels:
+      caprox.eu/cni: cilium
+  releaseName: cilium
+  chartName: cilium
+  repoURL: https://helm.cilium.io/
+  version: "1.19.3"
+  namespace: kube-system

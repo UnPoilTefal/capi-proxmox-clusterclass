@@ -1,0 +1,37 @@
+# Patch kube-proxy-setup — active le mode ipvs si kubeProxy.mode == "ipvs"
+# enabledIf : ce patch n'est appliqué QUE si la condition est vraie.
+# Il génère un script qui ajoute la config KubeProxyConfiguration à kubeadm.yaml
+# avant l'init, forçant ipvs avec strictARP (requis pour MetalLB/kube-vip).
+- op: add
+  path: /spec/patches/-
+  value:
+    name: kube-proxy-setup
+    description: "Active kube-proxy en mode ipvs (si kubeProxy.mode=ipvs)"
+    enabledIf: "{{ if eq .kubeProxy.mode \"ipvs\" }}true{{ end }}"
+    definitions:
+      - selector:
+          apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+          kind: KubeadmControlPlaneTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+          - op: add
+            path: /spec/template/spec/kubeadmConfigSpec/files/-
+            valueFrom:
+              template: |
+                content: |
+                  #/bin/sh
+                  cat >> /run/kubeadm/kubeadm.yaml <<EOF
+                  ---
+                  apiVersion: kubeproxy.config.k8s.io/v1alpha1
+                  kind: KubeProxyConfiguration
+                  mode: "ipvs"
+                  ipvs:
+                    strictARP: true
+                  EOF
+                owner: root:root
+                permissions: "0755"
+                path: /tmp/kube-proxy.sh
+          - op: add
+            path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+            value: /tmp/kube-proxy.sh

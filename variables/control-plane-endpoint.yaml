@@ -1,0 +1,22 @@
+# Variable controlPlaneEndpoint — IP:port du VIP kube-apiserver
+#
+# host : IP virtuelle (VIP) gérée par kube-vip pour l'accès au kube-apiserver.
+#   → Doit être HORS du pool IPAM des nœuds (InClusterIPPool)
+#   → Doit être libre sur ton réseau (pas assignée à une VM)
+#   → Ex homelab : 192.168.40.240 (workload) ou 192.168.40.1 (mgmt)
+# port : 6443 par défaut (port standard kube-apiserver)
+- op: add
+  path: /spec/variables/-
+  value:
+    name: controlPlaneEndpoint
+    required: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+            example: "192.168.40.240"
+          port:
+            type: integer
+            default: 6443

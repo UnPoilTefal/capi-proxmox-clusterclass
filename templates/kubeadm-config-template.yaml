@@ -1,0 +1,21 @@
+# =============================================================================
+# KubeadmConfigTemplate — configuration kubeadm des nœuds Workers
+# =============================================================================
+#
+# Identique à la section joinConfiguration du KubeadmControlPlaneTemplate
+# mais pour les workers. Le patch WorkerNodeSetup.yaml injecte les SSH keys.
+# =============================================================================
+kind: KubeadmConfigTemplate
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+metadata:
+  name: proxmox-kubernetes-engine-workertemplate
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+          - name: provider-id
+            value: "proxmox://'{{ ds.meta_data.instance_id }}'"
+          - name: cloud-provider
+            value: external

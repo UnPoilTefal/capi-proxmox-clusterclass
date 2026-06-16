@@ -1,0 +1,15 @@
+# Service Load Balancer via kube-vip DaemonSet
+# Le ConfigMap "svc-lb-kube-vip" est généré depuis les fichiers sources/
+# et injecté dans les clusters workload via ClusterResourceSet.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- clusterresourceset-kube-vip.yaml
+configMapGenerator:
+- name: svc-lb-kube-vip
+  files:
+  - sources/kube-vip-cloud-controller.yaml
+  - sources/kube-vip-svc-lb.yaml
+  - sources/cm.yaml
+  options:
+    disableNameSuffixHash: true

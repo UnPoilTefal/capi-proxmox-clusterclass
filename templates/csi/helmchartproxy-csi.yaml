@@ -1,0 +1,45 @@
+# =============================================================================
+# HelmChartProxy — Proxmox CSI Plugin (stockage persistant)
+# =============================================================================
+#
+# RÔLE :
+#   Permet aux workloads K8s de provisionner des volumes persistants (PVC)
+#   directement sur les datastores Proxmox (local-lvm, ZFS, Ceph, etc.).
+#   Crée une StorageClass "proxmox" comme classe par défaut du cluster.
+#
+# ACTIVATION : label caprox.eu/csi: "true" sur le Cluster CR
+# → OPTIONNEL pour le homelab, activer si tu as besoin de stockage persistant.
+#
+# PRÉREQUIS : même secret Proxmox que le CCM (csi-config injecté via ClusterResourceSet)
+# =============================================================================
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: csi
+spec:
+  clusterSelector:
+    matchLabels:
+      caprox.eu/csi: "true"
+  releaseName: csi
+  chartName: proxmox-csi-plugin
+  repoURL: oci://ghcr.io/sergelogvinov/charts
+  version: "0.4.1"
+  namespace: kube-system
+  valuesTemplate: |
+    existingConfigSecret: csi-config
+    extraVolumes:
+      - name: credentials-proxmox
+        secret:
+          secretName: proxmox-credentials
+    extraVolumeMounts:
+      - name: credentials-proxmox
+        readOnly: true
+        mountPath: "/var/run/secrets/proxmox"
+    storageClass:
+      - name: proxmox
+        storage: local
+        ssd: true
+        reclaimPolicy: Delete
+        fstype: ext4
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "true"

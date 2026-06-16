@@ -1,0 +1,62 @@
+# =============================================================================
+# HelmChartProxy — Proxmox Cloud Controller Manager (CCM)
+# =============================================================================
+#
+# RÔLE DU CCM :
+#   Le CCM Proxmox synchronise l'état des nœuds K8s avec les VMs Proxmox.
+#   Il gère :
+#     - Le cycle de vie des nœuds (suppression du nœud K8s si la VM Proxmox
+#       est supprimée → évite les nœuds "fantôme")
+#     - L'initialisation du provider-id et des labels cloud (region, zone)
+#
+#   Sans CCM, les nœuds restent bloqués en état "NotReady" avec la taint
+#   node.cloudprovider.kubernetes.io/uninitialized.
+#
+# PRÉREQUIS :
+#   Un Secret "ccm-config" doit exister dans le cluster workload (kube-system).
+#   Il est livré via ClusterResourceSet (clusterresourceset-proxmox-secret.yaml)
+#   qui copie le Secret depuis le namespace caprox-kubernetes-engine du mgmt cluster.
+#   → Configurer secret-proxmox-cluster-csi.yaml avec tes credentials Proxmox API.
+#
+# ACTIVATION : label caprox.eu/ccm: "true" sur le Cluster CR
+# =============================================================================
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: ccm
+spec:
+  clusterSelector:
+    matchLabels:
+      caprox.eu/ccm: "true"
+  releaseName: ccm
+  chartName: proxmox-cloud-controller-manager
+  repoURL: oci://ghcr.io/sergelogvinov/charts
+  version: "0.2.22"
+  namespace: kube-system
+  valuesTemplate: |
+    existingConfigSecret: ccm-config
+    # Monte le secret proxmox-credentials (token API Proxmox) dans le pod CCM
+    extraVolumes:
+      - name: credentials-proxmox
+        secret:
+          secretName: proxmox-credentials
+    extraVolumeMounts:
+      - name: credentials-proxmox
+        readOnly: true
+        mountPath: "/var/run/secrets/proxmox"
+    # Seul le contrôleur cloud-node est activé (découverte/suppression des nœuds)
+    enabledControllers:
+      - cloud-node
+    # Le CCM ne tourne que sur les nœuds CP (tolérations + affinité)
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+      - key: node.cloudprovider.kubernetes.io/uninitialized
+        value: "true"

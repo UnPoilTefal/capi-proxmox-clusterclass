@@ -1,0 +1,15 @@
+# Variable dnsServers — DNS injectés dans cloud-init des VMs
+# → Utiliser le DNS de ton réseau (ex: routeur/PiHole: 192.168.40.254)
+- op: add
+  path: /spec/variables/-
+  value:
+    name: dnsServers
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: array
+        minItems: 1
+        items:
+          type: string
+        default: ["8.8.8.8", "1.1.1.1"]
+        example: ["192.168.40.254"]

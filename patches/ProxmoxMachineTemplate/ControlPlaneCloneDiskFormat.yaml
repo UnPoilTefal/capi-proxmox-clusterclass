@@ -1,0 +1,17 @@
+- op: add
+  path: /spec/patches/-
+  value:
+    name: ControlPlaneCloneDiskFormat
+    description: "Override format disque CP (qcow2, raw, vmdk)"
+    enabledIf: "{{ if .cloneSpec.machineSpec.controlPlane.format }}true{{ end }}"
+    definitions:
+      - selector:
+          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+          kind: ProxmoxMachineTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+          - op: replace
+            path: /spec/template/spec/format
+            valueFrom:
+              variable: cloneSpec.machineSpec.controlPlane.format

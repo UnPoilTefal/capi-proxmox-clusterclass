@@ -1,0 +1,33 @@
+# =============================================================================
+# ProxmoxMachineTemplate — spec VM pour les nœuds Workers
+# =============================================================================
+#
+# Identique au template CP (proxmox-machine-template-cp.yaml) mais pour les
+# workers. Les patches WorkerNode* appliquent les specs définies dans la variable
+# cloneSpec.machineSpec.workerNode du Cluster CR.
+#
+# Si les workers et CP partagent la même spec (cas courant en homelab),
+# tu peux ne définir que controlPlane dans machineSpec et laisser workerNode vide
+# → les valeurs du template (ci-dessous) seront utilisées telles quelles.
+# =============================================================================
+kind: ProxmoxMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+metadata:
+  name: proxmox-clusterclass-v0.1.0-workertemplate
+spec:
+  template:
+    spec:
+      templateSelector:
+        matchTags:
+        - "v1-35-5"   # remplacé par le patch WorkerNodeSetup.yaml
+      format: qcow2
+      full: true
+      network:
+        networkDevices:
+        - name: net0
+          bridge: vmbr40
+          model: virtio
+          ipPoolRef:
+          - kind: InClusterIPPool
+            apiGroup: ipam.cluster.x-k8s.io
+            name: clusterclass-ipv4

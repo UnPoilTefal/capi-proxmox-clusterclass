@@ -1,0 +1,99 @@
+# =============================================================================
+# KubeadmControlPlaneTemplate — configuration kubeadm des nœuds CP
+# =============================================================================
+#
+# RÔLE :
+#   Définit comment kubeadm initialise et joint les nœuds control-plane.
+#   C'est ici que sont injectés :
+#     1. kube-vip (pod statique pour le VIP du kube-apiserver)
+#     2. Le workaround kube-vip/kubeadm ≥ v1.29
+#     3. Le provider-id Proxmox (requis par le CCM Proxmox)
+#     4. cloud-provider: external (requis pour Proxmox CCM)
+#
+# PATCHES APPLIQUÉS DESSUS (via ClusterClass patches) :
+#   - ControlPlaneSetup.yaml : injecte SSH keys + kube-vip static pod manifest
+#   - kube-proxy-setup.yaml  : configure kube-proxy en mode ipvs (si activé)
+#
+# KUBE-VIP :
+#   kube-vip tourne comme pod statique sur chaque nœud CP.
+#   En mode ARP, il annonce l'IP VIP (controlPlaneEndpoint.host) via gratuitous ARP.
+#   Si le nœud CP leader tombe, kube-vip élira un nouveau leader et re-annoncera l'IP.
+#   → Prérequis : l'IP VIP doit être HORS du pool IPAM et de tout autre usage.
+# =============================================================================
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: KubeadmControlPlaneTemplate
+metadata:
+  name: proxmox-kubernetes-engine
+spec:
+  template:
+    spec:
+      kubeadmConfigSpec:
+        files:
+        # Fichier factice : le contrôleur CAPI requiert que files[] soit non vide.
+        # On lui donne /dev/null comme cible sans effet de bord.
+        - content: |
+            placeholder — le contrôleur sanitize un tableau files vide,
+            ce fichier factice permet de garder le tableau initialisé.
+          owner: root:root
+          path: /dev/null
+
+        # Script de workaround kube-vip + kubeadm ≥ v1.29
+        # Contexte : kubeadm init v1.29+ crée /etc/kubernetes/super-admin.conf
+        # (en plus de admin.conf). kube-vip monte admin.conf pour accéder à l'API
+        # pendant l'init, mais il n'existe pas encore → race condition.
+        # Le script patche le pod kube-vip pour pointer sur super-admin.conf
+        # au moment du kubeadm init uniquement.
+        # Ref : https://github.com/kube-vip/kube-vip/issues/684
+        - path: /etc/kube-vip-prepare.sh
+          owner: root:root
+          permissions: "0700"
+          content: |
+            #!/bin/bash
+            set -e
+            KUBEADM_MINOR="$(kubeadm version -o short | cut -d '.' -f 2)"
+            if [[ "$KUBEADM_MINOR" -lt "29" ]]; then
+              exit 0
+            fi
+            IS_KUBEADM_INIT="false"
+            if [[ -f /run/kubeadm/kubeadm.yaml ]]; then
+              IS_KUBEADM_INIT="true"
+            fi
+            if [[ -f /etc/kubeadm.sh ]] && grep -q -e "kubeadm init" /etc/kubeadm.sh; then
+              IS_KUBEADM_INIT="true"
+            fi
+            if [[ "$IS_KUBEADM_INIT" == "true" ]]; then
+              sed -i 's#path: /etc/kubernetes/admin.conf#path: /etc/kubernetes/super-admin.conf#' \
+                /etc/kubernetes/manifests/kube-vip.yaml
+            fi
+
+        # Commandes exécutées AVANT kubeadm init/join sur chaque nœud CP.
+        preKubeadmCommands:
+        - /etc/kube-vip-prepare.sh
+
+        # Configuration kubeadm init (premier nœud CP uniquement)
+        initConfiguration:
+          nodeRegistration:
+            kubeletExtraArgs:
+            # provider-id : identifiant unique de la VM dans le cloud provider.
+            # Requis par le CCM Proxmox pour mapper les nœuds K8s aux VMs Proxmox.
+            # {{ ds.meta_data.instance_id }} = instance-id cloud-init (UUID Proxmox)
+            - name: provider-id
+              value: "proxmox://'{{ ds.meta_data.instance_id }}'"
+            # cloud-provider: external = désactive le cloud controller intégré kubeadm
+            # et délègue au CCM Proxmox (déployé par HelmChartProxy ccm)
+            - name: cloud-provider
+              value: external
+
+        # Configuration kubeadm join (nœuds CP supplémentaires)
+        joinConfiguration:
+          nodeRegistration:
+            kubeletExtraArgs:
+            - name: provider-id
+              value: "proxmox://'{{ ds.meta_data.instance_id }}'"
+            - name: cloud-provider
+              value: external
+
+        # Note : kube-vip static pod manifest est injecté ICI via le patch
+        # ControlPlaneSetup.yaml (dans patches/KubeadmControlPlaneTemplate/).
+        # Il est rendu comme template Go depuis la variable controlPlaneEndpoint.host
+        # → pas de valeur hardcodée dans ce fichier.

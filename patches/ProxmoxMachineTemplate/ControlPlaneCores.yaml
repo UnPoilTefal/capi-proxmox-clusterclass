@@ -1,0 +1,19 @@
+# Patch ControlPlaneCores — surcharge le nombre de CPU du nœud CP
+# enabledIf : n'appliqué que si cloneSpec.machineSpec.controlPlane.numCores est défini
+- op: add
+  path: /spec/patches/-
+  value:
+    name: ControlPlaneCores
+    description: "Override CPU cores des nœuds CP"
+    enabledIf: "{{ if .cloneSpec.machineSpec.controlPlane.numCores }}true{{ end }}"
+    definitions:
+      - selector:
+          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+          kind: ProxmoxMachineTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+          - op: add
+            path: /spec/template/spec/numCores
+            valueFrom:
+              variable: cloneSpec.machineSpec.controlPlane.numCores

@@ -1,0 +1,102 @@
+# Patch ControlPlaneSetup — injecte dans KubeadmControlPlaneTemplate :
+#   1. SSH keys (depuis cloneSpec.sshAuthorizedKeys) → accès root aux VMs CP
+#   2. kube-vip static pod (depuis variable controlPlaneEndpoint.host)
+#   3. Sélection du template Proxmox par tag (depuis cloneSpec.vmTemplate.templateTag)
+#
+# Le kube-vip static pod est défini en Go template pour interpoler l'IP VIP.
+# Il tourne sur chaque nœud CP et maintient l'IP VIP en mode ARP leader election.
+- op: add
+  path: /spec/patches/-
+  value:
+    name: ControlPlaneSetup
+    description: "Configure CP : kube-vip static pod, SSH keys, template tag"
+    definitions:
+      - selector:
+          apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+          kind: KubeadmControlPlaneTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+          # Injection des clés SSH dans les nœuds CP
+          - op: add
+            path: /spec/template/spec/kubeadmConfigSpec/users
+            valueFrom:
+              template: |
+                - name: root
+                  sshAuthorizedKeys: {{ .cloneSpec.sshAuthorizedKeys }}
+          # Injection du manifest kube-vip (pod statique)
+          # Rendu en Go template pour interpoler l'IP VIP depuis controlPlaneEndpoint.host
+          - op: add
+            path: /spec/template/spec/kubeadmConfigSpec/files/-
+            valueFrom:
+              template: |
+                owner: root:root
+                path: /etc/kubernetes/manifests/kube-vip.yaml
+                content: |
+                  apiVersion: v1
+                  kind: Pod
+                  metadata:
+                    name: kube-vip
+                    namespace: kube-system
+                  spec:
+                    containers:
+                    - args:
+                      - manager
+                      env:
+                      - name: vip_arp
+                        value: "true"
+                      - name: port
+                        value: "6443"
+                      - name: vip_nodename
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: spec.nodeName
+                      - name: vip_interface
+                        value: "{{ .cloneSpec.virtualIPNetworkInterface }}"
+                      - name: vip_subnet
+                        value: "32"
+                      - name: dns_mode
+                        value: first
+                      - name: cp_enable
+                        value: "true"
+                      - name: cp_namespace
+                        value: kube-system
+                      - name: svc_leasename
+                        value: plndr-svcs-lock
+                      - name: address
+                        value: "{{ .controlPlaneEndpoint.host }}"
+                      image: ghcr.io/kube-vip/kube-vip:v1.0.0
+                      imagePullPolicy: IfNotPresent
+                      name: kube-vip
+                      resources: {}
+                      securityContext:
+                        capabilities:
+                          add:
+                          - NET_ADMIN
+                          - NET_RAW
+                          drop:
+                          - ALL
+                      volumeMounts:
+                      - mountPath: /etc/kubernetes/admin.conf
+                        name: kubeconfig
+                    hostAliases:
+                    - hostnames:
+                      - kubernetes
+                      ip: 127.0.0.1
+                    hostNetwork: true
+                    volumes:
+                    - hostPath:
+                        path: /etc/kubernetes/admin.conf
+                      name: kubeconfig
+      # Sélection du template Proxmox CP par tag
+      - selector:
+          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+          kind: ProxmoxMachineTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+          - op: replace
+            path: /spec/template/spec/templateSelector/matchTags
+            valueFrom:
+              template: |
+                [ "{{ .cloneSpec.vmTemplate.templateTag }}" ]

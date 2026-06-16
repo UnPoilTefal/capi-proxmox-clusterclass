@@ -1,0 +1,28 @@
+# =============================================================================
+# ClusterResourceSet — déploiement kube-vip Service LB dans les clusters workload
+# =============================================================================
+#
+# RÔLE :
+#   kube-vip en mode Service Load Balancer permet aux Services de type LoadBalancer
+#   de recevoir une IP externe (ARP) depuis la plage configurée dans le ConfigMap
+#   "kubevip" (sources/cm.yaml → cidr-global ou range-global).
+#   → À adapter : configurer la plage LB dans sources/cm.yaml
+#
+# kube-vip = deux composants ici :
+#   1. kube-vip-cloud-provider : cloud controller qui assigne les IPs LB
+#   2. kube-vip DaemonSet      : annonce les IPs via ARP sur chaque nœud
+#
+# ACTIVATION : label caprox.eu/service-lb: "true" sur le Cluster CR
+# =============================================================================
+apiVersion: addons.cluster.x-k8s.io/v1beta2
+kind: ClusterResourceSet
+metadata:
+  name: svc-lb-kube-vip
+spec:
+  strategy: Reconcile
+  clusterSelector:
+    matchLabels:
+      caprox.eu/service-lb: "true"
+  resources:
+  - name: svc-lb-kube-vip
+    kind: ConfigMap
