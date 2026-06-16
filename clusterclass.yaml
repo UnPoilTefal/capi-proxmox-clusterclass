@@ -130,6 +130,8 @@ spec:
   # Variables disponibles (voir variables/*.yaml) :
   #   - cloneSpec        : spec de clonage VM (template, CPU/RAM/disk/réseau, SSH)
   #   - controlPlaneEndpoint : IP:port du VIP kube-apiserver (ex: 192.168.40.240:6443)
+  #   - ipv4Config       : pool d'IPs des nœuds + gateway (SEULE source IPAM, voir
+  #                        variables/ipv4-config.yaml — pas d'ipPoolRef ailleurs)
   #   - allowedNodes     : liste des nœuds Proxmox autorisés (ex: [prox-node-01])
   #   - dnsServers       : serveurs DNS pour les VMs (ex: [192.168.40.254])
   #   - kubeProxy        : mode kube-proxy (iptables ou ipvs)

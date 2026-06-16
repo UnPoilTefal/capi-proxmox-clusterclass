@@ -9,6 +9,9 @@
 # Si les workers et CP partagent la même spec (cas courant en homelab),
 # tu peux ne définir que controlPlane dans machineSpec et laisser workerNode vide
 # → les valeurs du template (ci-dessous) seront utilisées telles quelles.
+#
+# IPAM : pas d'ipPoolRef ici, même raison que proxmox-machine-template-cp.yaml
+# (l'IP vient du pool auto-généré par ipv4Config sur ProxmoxCluster).
 # =============================================================================
 kind: ProxmoxMachineTemplate
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
@@ -27,7 +30,3 @@ spec:
         - name: net0
           bridge: vmbr40
           model: virtio
-          ipPoolRef:
-          - kind: InClusterIPPool
-            apiGroup: ipam.cluster.x-k8s.io
-            name: clusterclass-ipv4

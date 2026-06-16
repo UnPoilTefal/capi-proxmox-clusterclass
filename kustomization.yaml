@@ -46,6 +46,9 @@ patches:
   - path: variables/control-plane-endpoint.yaml
     target:
       kind: ClusterClass
+  - path: variables/ipv4-config.yaml
+    target:
+      kind: ClusterClass
   - path: variables/dns-config.yaml
     target:
       kind: ClusterClass

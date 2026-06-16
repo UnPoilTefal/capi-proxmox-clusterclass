@@ -10,12 +10,19 @@
 #     - les DNS injectés dans cloud-init des VMs
 #
 # VALEURS DYNAMIQUES :
-#   controlPlaneEndpoint, allowedNodes et dnsServers sont injectés par le patch
-#   ProxmoxClusterTemplateGeneral.yaml depuis les variables du Cluster CR.
+#   controlPlaneEndpoint, allowedNodes, dnsServers ET ipv4Config sont injectés
+#   par le patch ProxmoxClusterTemplateGeneral.yaml depuis les variables du
+#   Cluster CR.
 #
-# ipv4Config : ce champ est requis par l'API CAPMOX mais les IPs réelles
-#   sont allouées depuis l'InClusterIPPool "clusterclass-ipv4".
-#   → adapter le range si tu déplaces le projet vers un autre sous-réseau.
+# ipv4Config : C'EST LA SEULE SOURCE D'ALLOCATION IP DU PROJET.
+#   CAPMOX génère automatiquement un InClusterIPPool dédié par cluster
+#   (<cluster>-v4-icip) à partir de ce champ. Chaque Cluster CR doit fournir
+#   un range disjoint via la variable ipv4Config (voir variables/ipv4-config.yaml).
+#   → NE PAS ajouter d'ipPoolRef sur les networkDevices des ProxmoxMachineTemplate
+#   (cf. commentaire IPAM dans proxmox-machine-template-cp.yaml) : combiner les
+#   deux mécanismes crée 2 IPAddressClaim par device, parfois avec LA MÊME IP
+#   (chaque pool alloue indépendamment "la première IP libre") → collision
+#   réseau réelle, vécue et corrigée le 2026-06-16.
 #
 # credentialsRef : référence vers le Secret contenant les credentials API Proxmox.
 #   Sans namespace explicite, le CRD résout dans le même namespace que le

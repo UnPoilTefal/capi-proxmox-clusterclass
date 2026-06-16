@@ -15,8 +15,15 @@
 #   → Le patch ControlPlaneSetup.yaml injecte ce tag dans matchTags ci-dessous.
 #
 # IPAM :
-#   L'interface réseau référence l'InClusterIPPool "clusterclass-ipv4".
-#   Le contrôleur CAPI IPAM alloue une IP libre du pool à chaque VM créée.
+#   L'allocation IP vient EXCLUSIVEMENT du champ ipv4Config sur ProxmoxCluster
+#   (voir templates/proxmox-cluster-template.yaml + variables/ipv4-config.yaml).
+#   CAPMOX auto-génère un InClusterIPPool dédié par cluster (<cluster>-v4-icip)
+#   à partir de ce champ et l'utilise comme source par défaut pour tout
+#   networkDevice qui n'a PAS son propre ipPoolRef.
+#   → NE PAS ajouter d'ipPoolRef explicite ici : ipv4Config + ipPoolRef combinés
+#   créent DEUX IPAddressClaim pour le même device, qui peuvent recevoir la
+#   MÊME adresse (chaque pool alloue indépendamment "la première IP libre")
+#   → collision IP réelle sur le réseau, vécue et corrigée le 2026-06-16.
 #   La gateway et le DNS sont configurés par cloud-init depuis ProxmoxCluster.
 #
 # VALEURS SURCHARGÉES PAR PATCHES (depuis variable cloneSpec du Cluster CR) :
@@ -55,15 +62,10 @@ spec:
       full: true
 
       # Configuration réseau principale de la VM
+      # Pas d'ipPoolRef ici : l'IP est allouée depuis le pool auto-généré par
+      # ipv4Config (voir commentaire IPAM ci-dessus).
       network:
         networkDevices:
         - name: net0          # nom du device réseau dans la VM (net0 = premier NIC)
           bridge: vmbr40      # bridge Proxmox → VLAN 40 (192.168.40.0/24)
           model: virtio       # driver réseau para-virtualisé (perf optimale)
-          # Référence à l'InClusterIPPool pour l'allocation d'IP dynamique.
-          # Le contrôleur IPAM attribue une IP libre du pool à chaque VM.
-          # → nom du pool défini dans ip-pool.yaml (mgmt ou workload selon contexte)
-          ipPoolRef:
-          - kind: InClusterIPPool
-            apiGroup: ipam.cluster.x-k8s.io
-            name: clusterclass-ipv4

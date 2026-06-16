@@ -1,10 +1,10 @@
 # Patch ProxmoxClusterTemplateGeneral — injecte les variables cluster dans ProxmoxClusterTemplate
-# Configure : allowedNodes (nœuds Proxmox autorisés), controlPlaneEndpoint (VIP), dnsServers
+# Configure : allowedNodes (nœuds Proxmox autorisés), controlPlaneEndpoint (VIP), dnsServers, ipv4Config
 - op: add
   path: /spec/patches/-
   value:
     name: ProxmoxClusterTemplateGeneral
-    description: "Configure ProxmoxCluster : allowedNodes, VIP endpoint, DNS"
+    description: "Configure ProxmoxCluster : allowedNodes, VIP endpoint, DNS, pool IPv4"
     definitions:
       - selector:
           apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
@@ -28,3 +28,15 @@
             path: /spec/template/spec/dnsServers
             valueFrom:
               variable: dnsServers
+          - op: replace
+            path: /spec/template/spec/ipv4Config/addresses
+            valueFrom:
+              variable: ipv4Config.addresses
+          - op: replace
+            path: /spec/template/spec/ipv4Config/gateway
+            valueFrom:
+              variable: ipv4Config.gateway
+          - op: replace
+            path: /spec/template/spec/ipv4Config/prefix
+            valueFrom:
+              variable: ipv4Config.prefix
