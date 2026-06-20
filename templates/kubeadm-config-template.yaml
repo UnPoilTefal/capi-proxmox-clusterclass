@@ -2,14 +2,11 @@
 # KubeadmConfigTemplate — configuration kubeadm des nœuds Workers
 # =============================================================================
 #
-# Identique à la section joinConfiguration du KubeadmControlPlaneTemplate
+# Miroir de la section joinConfiguration du KubeadmControlPlaneTemplate
 # mais pour les workers. Le patch WorkerNodeSetup.yaml injecte les SSH keys.
 #
-# /etc/hosts : le hostname de la VM (ex: k3s-app-worker-xxxx) n'est enregistré
-# dans AUCUN DNS en homelab, et l'image Packer ne le pré-remplit pas dans
-# /etc/hosts non plus → tout composant qui résout son propre hostname en local
-# échoue ("no such host"). Voir kubeadm-control-plane-template.yaml pour le
-# détail du symptôme (vécu et corrigé le 2026-06-16).
+# Voir kubeadm-control-plane-template.yaml pour le détail des choix
+# provider-id, --node-ip et /etc/hosts.
 # =============================================================================
 kind: KubeadmConfigTemplate
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
@@ -19,12 +16,15 @@ spec:
   template:
     spec:
       preKubeadmCommands:
+      - MY_IP=$(ip -4 addr show ens18 | grep -oP 'inet \K[\d.]+' | head -1) && echo "KUBELET_EXTRA_ARGS=--node-ip=${MY_IP}" > /etc/default/kubelet
+      - grep -q '^127.0.0.1 localhost' /etc/hosts || echo '127.0.0.1 localhost' >> /etc/hosts
+      - grep -q '^::1 localhost' /etc/hosts || echo '::1 localhost' >> /etc/hosts
       - echo "$(ip -4 addr show ens18 | grep -oP 'inet \K[\d.]+' | head -1) $(hostname)" >> /etc/hosts
 
-      # PAS de provider-id (voir kubeadm-control-plane-template.yaml pour le
-      # détail) : le CCM sergelogvinov le découvre lui-même par hostname.
       joinConfiguration:
         nodeRegistration:
           kubeletExtraArgs:
+          - name: provider-id
+            value: "proxmox://'{{ ds.meta_data.instance_id }}'"
           - name: cloud-provider
             value: external

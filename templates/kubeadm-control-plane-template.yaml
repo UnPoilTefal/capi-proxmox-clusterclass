@@ -4,40 +4,42 @@
 #
 # RÔLE :
 #   Définit comment kubeadm initialise et joint les nœuds control-plane.
-#   C'est ici que sont injectés :
+#   Injectés ici :
 #     1. kube-vip (pod statique pour le VIP du kube-apiserver)
-#     2. Le workaround kube-vip/kubeadm ≥ v1.29
-#     3. Le provider-id Proxmox (requis par le CCM Proxmox)
-#     4. cloud-provider: external (requis pour Proxmox CCM)
+#     2. Workaround kube-vip/kubeadm ≥ v1.29
+#     3. provider-id au format CAPMOX (requis par CAPI pour lier Machine→Node)
+#     4. cloud-provider: external (requis pour activer le CCM externe)
+#     5. --node-ip dynamique (requis par le CCM en K8s ≥ 1.33)
 #
 # PATCHES APPLIQUÉS DESSUS (via ClusterClass patches) :
 #   - ControlPlaneSetup.yaml : injecte SSH keys + kube-vip static pod manifest
 #   - kube-proxy-setup.yaml  : configure kube-proxy en mode ipvs (si activé)
 #
-# KUBE-VIP :
-#   kube-vip tourne comme pod statique sur chaque nœud CP.
-#   En mode ARP, il annonce l'IP VIP (controlPlaneEndpoint.host) via gratuitous ARP.
-#   Si le nœud CP leader tombe, kube-vip élira un nouveau leader et re-annoncera l'IP.
-#   → Prérequis : l'IP VIP doit être HORS du pool IPAM et de tout autre usage.
+# PROVIDER-ID ET CCM :
+#   kubelet pose provider-id = proxmox://<uuid cloud-init> sur le Node dès le boot.
+#   CAPMOX pose le même UUID sur ProxmoxMachine.spec.providerID → CAPI peut lier
+#   Machine→Node via ce providerID commun.
+#   Le CCM sergelogvinov ne touche PAS spec.providerID si déjà set (immutable) ;
+#   il initialise le Node via lookup hostname→VM dans l'API Proxmox, et set
+#   InternalIP depuis l'annotation alpha.kubernetes.io/provided-node-ip (posée
+#   par kubelet quand --node-ip est fourni — requis depuis K8s 1.33 où
+#   --cloud-provider a été retiré de kubelet).
 #
-# kubelet-preferred-address-types :
-#   Réglage explicite par précaution (kubeadm met déjà InternalIP en premier par
-#   défaut dans cette version) — voir le VRAI fix ci-dessous (/etc/hosts).
+# /etc/hosts :
+#   L'image Packer inclut 127.0.0.1 localhost via le template cloud-init
+#   (roles/common — hosts.debian.tmpl). Le preKubeadmCommand l'ajoute aussi
+#   en ceinture+bretelles, et ajoute l'IP propre de la VM pour la résolution
+#   du hostname local (utilisé par etcd, apiserver, et les health checks).
 #
-# /etc/hosts (LE VRAI FIX, 2026-06-16) :
-#   /etc/hosts est VIDE sur l'image Packer — le hostname de la VM (ex:
-#   mgmt-control-plane-xxxx) n'est enregistré dans AUCUN DNS du homelab.
-#   Le proxy interne de kube-apiserver vers son propre pod etcd (et d'autres
-#   résolutions locales) échoue alors avec "no such host" sur le DNS LAN,
-#   et Cluster.status.conditions[ControlPlaneAvailable] reste bloqué à
-#   "Unknown : Failed to get etcd members" indéfiniment, même quand le control
-#   plane est en réalité parfaitement sain (etcd/apiserver/scheduler Healthy).
-#   → preKubeadmCommand ajoute une entrée locale hostname→IP avant kubeadm init.
+# IMMUTABILITÉ KubeadmControlPlaneTemplate :
+#   spec.template.spec est immutable une fois appliqué → tout changement de
+#   contenu exige un renommage (v3→v4→v5...). Le ClusterClass référence la
+#   version courante ; les clusters existants continuent avec l'ancienne.
 # =============================================================================
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: KubeadmControlPlaneTemplate
 metadata:
-  name: proxmox-kubernetes-engine-v3
+  name: proxmox-kubernetes-engine-v4
 spec:
   template:
     spec:
@@ -49,21 +51,12 @@ spec:
               value: InternalIP,Hostname,ExternalIP
 
         files:
-        # Fichier factice : le contrôleur CAPI requiert que files[] soit non vide.
-        # On lui donne /dev/null comme cible sans effet de bord.
         - content: |
             placeholder — le contrôleur sanitize un tableau files vide,
             ce fichier factice permet de garder le tableau initialisé.
           owner: root:root
           path: /dev/null
 
-        # Script de workaround kube-vip + kubeadm ≥ v1.29
-        # Contexte : kubeadm init v1.29+ crée /etc/kubernetes/super-admin.conf
-        # (en plus de admin.conf). kube-vip monte admin.conf pour accéder à l'API
-        # pendant l'init, mais il n'existe pas encore → race condition.
-        # Le script patche le pod kube-vip pour pointer sur super-admin.conf
-        # au moment du kubeadm init uniquement.
-        # Ref : https://github.com/kube-vip/kube-vip/issues/684
         - path: /etc/kube-vip-prepare.sh
           owner: root:root
           permissions: "0700"
@@ -86,40 +79,36 @@ spec:
                 /etc/kubernetes/manifests/kube-vip.yaml
             fi
 
-        # Commandes exécutées AVANT kubeadm init/join sur chaque nœud CP.
         preKubeadmCommands:
+        # Fourni --node-ip à kubelet avant que kubeadm le (re)démarre.
+        # Nécessaire depuis K8s 1.33 : kubelet ne lit plus --cloud-provider
+        # et ne pose donc plus alpha.kubernetes.io/provided-node-ip sans --node-ip.
+        # Sans cette annotation, le CCM ne peut pas déterminer l'InternalIP du node.
+        - MY_IP=$(ip -4 addr show ens18 | grep -oP 'inet \K[\d.]+' | head -1) && echo "KUBELET_EXTRA_ARGS=--node-ip=${MY_IP}" > /etc/default/kubelet
+        # Belt+suspenders : ajoute localhost et l'IP propre à /etc/hosts.
+        # Le template Packer cloud-init devrait déjà inclure 127.0.0.1 localhost,
+        # mais on le garantit ici pour les images non mises à jour.
+        - grep -q '^127.0.0.1 localhost' /etc/hosts || echo '127.0.0.1 localhost' >> /etc/hosts
+        - grep -q '^::1 localhost' /etc/hosts || echo '::1 localhost' >> /etc/hosts
         - echo "$(ip -4 addr show ens18 | grep -oP 'inet \K[\d.]+' | head -1) $(hostname)" >> /etc/hosts
         - /etc/kube-vip-prepare.sh
 
-        # Configuration kubeadm init (premier nœud CP uniquement)
-        #
-        # PAS de provider-id ici (vécu et corrigé le 2026-06-16) :
-        #   CAPMOX (ionos-cloud/cluster-api-provider-proxmox) proposait de le
-        #   définir au format proxmox://<uuid cloud-init>, mais le CCM utilisé
-        #   ici (sergelogvinov/proxmox-cloud-controller-manager) attend le
-        #   format proxmox://<region>/<vmid Proxmox numérique> et découvre lui
-        #   -même la VM par correspondance de HOSTNAME via l'API Proxmox.
-        #   spec.providerID est IMMUTABLE une fois posé (seulement ""→valeur) :
-        #   si kubelet le fixe au mauvais format, le CCM ne peut JAMAIS le
-        #   corriger → le node reste sans IP interne et sans taint levée
-        #   indéfiniment ("cloud-provider uninitialized" pour toujours).
         initConfiguration:
           nodeRegistration:
             kubeletExtraArgs:
-            # cloud-provider: external = désactive le cloud controller intégré kubeadm
-            # et délègue au CCM Proxmox (déployé par HelmChartProxy ccm), qui
-            # assigne lui-même providerID + InternalIP par découverte hostname.
+            # provider-id au format CAPMOX (proxmox://<uuid cloud-init>).
+            # Valeur rendue par cloud-init Jinja2 au boot de la VM.
+            # Doit correspondre à ProxmoxMachine.spec.providerID pour que
+            # CAPI puisse lier Machine→Node.
+            - name: provider-id
+              value: "proxmox://'{{ ds.meta_data.instance_id }}'"
             - name: cloud-provider
               value: external
 
-        # Configuration kubeadm join (nœuds CP supplémentaires)
         joinConfiguration:
           nodeRegistration:
             kubeletExtraArgs:
+            - name: provider-id
+              value: "proxmox://'{{ ds.meta_data.instance_id }}'"
             - name: cloud-provider
               value: external
-
-        # Note : kube-vip static pod manifest est injecté ICI via le patch
-        # ControlPlaneSetup.yaml (dans patches/KubeadmControlPlaneTemplate/).
-        # Il est rendu comme template Go depuis la variable controlPlaneEndpoint.host
-        # → pas de valeur hardcodée dans ce fichier.
