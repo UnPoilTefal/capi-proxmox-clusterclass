@@ -12,6 +12,6 @@
             controlPlane: true
         jsonPatches:
           - op: add
-            path: /spec/template/spec/disks/bootVolume/storage
+            path: /spec/template/spec/storage
             valueFrom:
               variable: cloneSpec.machineSpec.controlPlane.disks.bootVolume.storage

@@ -15,6 +15,6 @@
               - proxmox-worker
         jsonPatches:
           - op: add
-            path: /spec/template/spec/disks/bootVolume/storage
+            path: /spec/template/spec/storage
             valueFrom:
               variable: cloneSpec.machineSpec.workerNode.disks.bootVolume.storage
