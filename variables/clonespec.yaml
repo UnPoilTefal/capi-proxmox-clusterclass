@@ -74,6 +74,9 @@
                             type: integer
                             minimum: 5
                             format: int32
+                          storage:
+                            type: string
+                            example: "local-lvm"
                         required:
                         - disk
                         - sizeGb

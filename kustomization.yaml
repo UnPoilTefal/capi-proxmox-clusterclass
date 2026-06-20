@@ -91,6 +91,9 @@ patches:
   - path: patches/ProxmoxMachineTemplate/ControlPlaneBootDisk.yaml
     target:
       kind: ClusterClass
+  - path: patches/ProxmoxMachineTemplate/ControlPlaneBootDiskStorage.yaml
+    target:
+      kind: ClusterClass
   - path: patches/ProxmoxMachineTemplate/ControlPlaneCloneDiskFormat.yaml
     target:
       kind: ClusterClass
@@ -109,6 +112,9 @@ patches:
     target:
       kind: ClusterClass
   - path: patches/ProxmoxMachineTemplate/WorkerNodeBootDisk.yaml
+    target:
+      kind: ClusterClass
+  - path: patches/ProxmoxMachineTemplate/WorkerNodeBootDiskStorage.yaml
     target:
       kind: ClusterClass
   - path: patches/ProxmoxMachineTemplate/WorkerNodeDefaultNetwork.yaml
