@@ -28,10 +28,7 @@
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: ClusterClass
 metadata:
-  name: proxmox-clusterclass-cilium-v0.1.0
-  # Nom conservé de l'upstream pour faciliter la comparaison.
-  # Le nom contient "cilium" mais la CNI est configurée via HelmChartProxy
-  # (voir templates/cni/) — ce fichier est CNI-agnostique.
+  name: proxmox-clusterclass-v0.2.0
 spec:
 
   # ---------------------------------------------------------------------------
@@ -43,7 +40,7 @@ spec:
     templateRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
       kind: ProxmoxClusterTemplate
-      name: proxmox-clusterclass-cilium-v0.1.0-clustertemplate
+      name: proxmox-clusterclass-v0.2.0-clustertemplate
 
   # ---------------------------------------------------------------------------
   # CONTROL PLANE : définit comment bootstrapper les nœuds masters
@@ -100,7 +97,7 @@ spec:
       # Labels automatiquement appliqués aux nœuds workers
       metadata:
         labels:
-          node-role.kubernetes.io/node: ""
+          node-role.kubernetes.io/worker: ""
           topology.kubernetes.io/region: Datacenter
       # Auto-remediation : redémarre si ≤33% des workers sont unhealthy
       healthCheck:

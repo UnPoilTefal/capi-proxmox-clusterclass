@@ -1,8 +1,7 @@
-# CNI addon delivery — Calico activé (Cilium disponible mais commenté ci-dessous)
-# Pour switcher vers Cilium : remplacer calico par cilium dans resources.
+# CNI addon delivery — Calico activé par défaut.
+# Pour switcher vers Cilium : remplacer par examples/helmchartproxy-cilium.yaml
+# et changer le label caprox.eu/cni: calico → cilium sur le Cluster CR.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - helmchartproxy-calico.yaml
-# - helmchartproxy-cilium.yaml              # activer pour Cilium
-# - helmchartproxy-cilium-ipv6-dual-stack.yaml  # optionnel : dual-stack IPv4/IPv6

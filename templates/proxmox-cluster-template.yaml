@@ -36,7 +36,7 @@
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: ProxmoxClusterTemplate
 metadata:
-  name: proxmox-clusterclass-cilium-v0.1.0-clustertemplate
+  name: proxmox-clusterclass-v0.2.0-clustertemplate
 spec:
   template:
     spec:

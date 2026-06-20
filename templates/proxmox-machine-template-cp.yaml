@@ -10,7 +10,7 @@
 # SÉLECTION DU TEMPLATE PAR TAG :
 #   CAPMOX cherche dans Proxmox un template VM qui possède le tag correspondant
 #   à ce qui est défini dans la variable cloneSpec.vmTemplate.templateTag du Cluster CR.
-#   → Dans Proxmox UI : VM 9100 → Options → Tags → ajouter "v1-35-5"
+#   → Dans Proxmox UI : VM 9200 → Options → Tags → ajouter "v1-35-5"
 #   → Le Cluster CR doit avoir : cloneSpec.vmTemplate.templateTag: "v1-35-5"
 #   → Le patch ControlPlaneSetup.yaml injecte ce tag dans matchTags ci-dessous.
 #
