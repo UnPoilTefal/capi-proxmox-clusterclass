@@ -7,7 +7,7 @@
 #   proxmox-machine-template-cp.yaml et -worker.yaml — ipPoolRef volontairement
 #   absent pour éviter une double allocation / collision d'IP).
 #
-# Chaque Cluster CR (mgmt, k3s-app, ...) DOIT définir un range disjoint des
+# Chaque Cluster CR (mgmt, app, ...) DOIT définir un range disjoint des
 # autres clusters et de tout ce qui est déjà utilisé sur le réseau (VIP, etc.).
 - op: add
   path: /spec/variables/-

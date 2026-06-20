@@ -13,7 +13,7 @@
 # Seul vmTemplate.templateTag est REQUIS.
 # machineSpec est optionnel — si non fourni, la spec du template Proxmox est utilisée.
 #
-# En pratique dans un Cluster CR (voir clusters/k3s-app/cluster.yaml) :
+# En pratique dans un Cluster CR (voir clusters/app/cluster.yaml) :
 #   variables:
 #   - name: cloneSpec
 #     value:
