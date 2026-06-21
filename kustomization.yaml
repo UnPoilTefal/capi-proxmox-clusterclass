@@ -1,26 +1,17 @@
 # =============================================================================
-# Kustomize root — assemble le ClusterClass, ses Templates et ses Addons
+# Kustomize root — agrège toutes les ClusterClass du repo
 #
 # Prévisualiser :  kubectl kustomize .
 # Déployer     :  kubectl kustomize . | kubectl apply -f -
 #
-# Le ClusterClass (clusterclass.yaml) est désormais complet en lui-même :
-# variables et patches sont inline, aucun patch Kustomize n'est nécessaire
-# pour le ClusterClass. Kustomize sert uniquement à namespace-er et assembler
-# les ressources en un seul apply.
+# Structure :
+#   ns.yaml           → namespace partagé caprox-kubernetes-engine
+#   kubeadm-ubuntu/   → ClusterClass kubeadm + Ubuntu 26.04
+#   talos/            → (à venir) ClusterClass Talos
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: caprox-kubernetes-engine
 
 resources:
   - ns.yaml
-  - clusterclass.yaml
-  - templates/kubeadm-config-template.yaml
-  - templates/kubeadm-control-plane-template.yaml
-  - templates/proxmox-cluster-template.yaml
-  - templates/proxmox-machine-template-cp.yaml
-  - templates/proxmox-machine-template-worker.yaml
-  - templates/cni
-  - templates/csi
-  - templates/svc-lb
+  - kubeadm-ubuntu/

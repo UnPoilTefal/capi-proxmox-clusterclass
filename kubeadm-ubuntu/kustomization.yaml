@@ -1,0 +1,19 @@
+# =============================================================================
+# Kustomize — ClusterClass kubeadm + Ubuntu 26.04
+#
+# Prévisualiser :  kubectl kustomize kubeadm-ubuntu/
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: caprox-kubernetes-engine
+
+resources:
+  - clusterclass.yaml
+  - templates/kubeadm-config-template.yaml
+  - templates/kubeadm-control-plane-template.yaml
+  - templates/proxmox-cluster-template.yaml
+  - templates/proxmox-machine-template-cp.yaml
+  - templates/proxmox-machine-template-worker.yaml
+  - templates/cni
+  - templates/csi
+  - templates/svc-lb
