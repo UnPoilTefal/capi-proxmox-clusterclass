@@ -151,7 +151,6 @@ spec:
                     enum: [raw, qcow2, vmdk]
                   storage:
                     type: string
-                    default: "local-lvm"
                   disks:
                     type: object
                     properties:
