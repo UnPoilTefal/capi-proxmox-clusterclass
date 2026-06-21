@@ -1,0 +1,24 @@
+# =============================================================================
+# ProxmoxMachineTemplate — Workers — Talos ClusterClass
+#
+# Identique au template CP, sans user/SSH (Talos n'a pas de SSH).
+# templateSelector.matchTags → remplacé par le patch WorkerNodeSetup.
+# IPAM : pas d'ipPoolRef (voir proxmox-cluster-template.yaml).
+# =============================================================================
+kind: ProxmoxMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+metadata:
+  name: proxmox-talos-clusterclass-v0.1.0-worker-template
+spec:
+  template:
+    spec:
+      templateSelector:
+        matchTags:
+        - "talos-v1-13-4"
+      format: qcow2
+      full: true
+      network:
+        networkDevices:
+        - name: net0
+          bridge: vmbr40
+          model: virtio

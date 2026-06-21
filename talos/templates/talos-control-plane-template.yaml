@@ -1,0 +1,13 @@
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+kind: TalosControlPlaneTemplate
+metadata:
+  name: proxmox-talos-clusterclass-v0.1.0-cp-template
+spec:
+  template:
+    spec:
+      controlPlaneConfig:
+        generateType: controlplane
+        talosVersion: "v1.13"
+        # configPatches injectés par le patch ControlPlaneSetup du ClusterClass.
+        # L'op: add sur ce chemin crée/remplace le tableau entier.
+        configPatches: []

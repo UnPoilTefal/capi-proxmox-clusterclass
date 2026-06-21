@@ -1,0 +1,10 @@
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+kind: TalosConfigTemplate
+metadata:
+  name: proxmox-talos-clusterclass-v0.1.0-worker-config-template
+spec:
+  template:
+    spec:
+      generateType: worker
+      talosVersion: "v1.13"
+      configPatches: []

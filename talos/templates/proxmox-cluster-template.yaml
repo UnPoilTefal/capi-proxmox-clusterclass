@@ -1,0 +1,29 @@
+# =============================================================================
+# ProxmoxClusterTemplate — identique à kubeadm, nom propre au Talos ClusterClass.
+# Voir kubeadm-ubuntu/templates/proxmox-cluster-template.yaml pour la doc complète.
+# =============================================================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: ProxmoxClusterTemplate
+metadata:
+  name: proxmox-talos-clusterclass-v0.1.0-clustertemplate
+spec:
+  template:
+    spec:
+      credentialsRef:
+        name: capmox-manager-credentials
+
+      schedulerHints:
+        memoryAdjustment: 0
+
+      controlPlaneEndpoint:
+        host: 10.10.10.11
+        port: 6443
+
+      dnsServers:
+      - 8.8.8.8
+
+      ipv4Config:
+        addresses:
+        - 192.168.40.26-192.168.40.40
+        prefix: 24
+        gateway: 192.168.40.254

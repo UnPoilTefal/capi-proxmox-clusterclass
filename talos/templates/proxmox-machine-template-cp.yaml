@@ -1,0 +1,27 @@
+# =============================================================================
+# ProxmoxMachineTemplate — Control Plane — Talos ClusterClass
+#
+# CAPMOX-agnostic : même structure qu'en kubeadm, pas d'user/SSH pour Talos.
+# templateSelector.matchTags → remplacé par le patch ControlPlaneSetup
+# (variable cloneSpec.vmTemplate.templateTag, ex: "talos-v1-13-4").
+#
+# IPAM : pas d'ipPoolRef — l'allocation vient du pool auto-généré par
+# ipv4Config sur ProxmoxCluster (voir proxmox-cluster-template.yaml).
+# =============================================================================
+kind: ProxmoxMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+metadata:
+  name: proxmox-talos-clusterclass-v0.1.0-control-plane-template
+spec:
+  template:
+    spec:
+      templateSelector:
+        matchTags:
+        - "talos-v1-13-4"
+      format: qcow2
+      full: true
+      network:
+        networkDevices:
+        - name: net0
+          bridge: vmbr40
+          model: virtio
