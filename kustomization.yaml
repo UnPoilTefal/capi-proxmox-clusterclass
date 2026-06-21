@@ -1,22 +1,13 @@
 # =============================================================================
-# Kustomize root — assemble le ClusterClass complet
-# =============================================================================
+# Kustomize root — assemble le ClusterClass, ses Templates et ses Addons
 #
-# USAGE :
-#   Prévisualiser le résultat final :
-#     kubectl kustomize clusterclass/
+# Prévisualiser :  kubectl kustomize .
+# Déployer     :  kubectl kustomize . | kubectl apply -f -
 #
-#   Déployer sur le cluster courant :
-#     kubectl kustomize clusterclass/ | kubectl apply -f -
-#
-#   Déployer sur le mgmt cluster :
-#     kubectl kustomize clusterclass/ | kubectl apply -f - --kubeconfig=mgmt.kubeconfig
-#
-# FONCTIONNEMENT :
-#   Kustomize assemble clusterclass.yaml (qui a variables:[] et patches:[])
-#   puis applique chaque fichier variables/*.yaml et patches/**/*.yaml via
-#   des JSON patch operations ("op: add path: /spec/variables/-" et
-#   "op: add path: /spec/patches/-") pour construire le ClusterClass final.
+# Le ClusterClass (clusterclass.yaml) est désormais complet en lui-même :
+# variables et patches sont inline, aucun patch Kustomize n'est nécessaire
+# pour le ClusterClass. Kustomize sert uniquement à namespace-er et assembler
+# les ressources en un seul apply.
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -25,98 +16,11 @@ namespace: caprox-kubernetes-engine
 resources:
   - ns.yaml
   - clusterclass.yaml
-  # Templates des composants cluster
-  - templates/cni          # CNI addon delivery (Calico — voir templates/cni/kustomization.yaml)
-  - templates/csi          # CSI + CCM Proxmox addon delivery
-  - templates/svc-lb       # kube-vip service load balancer
   - templates/kubeadm-config-template.yaml
   - templates/kubeadm-control-plane-template.yaml
   - templates/proxmox-cluster-template.yaml
   - templates/proxmox-machine-template-cp.yaml
   - templates/proxmox-machine-template-worker.yaml
-
-patches:
-  # ── Variables exposées par le ClusterClass ──────────────────────────────────
-  - path: variables/clonespec.yaml
-    target:
-      kind: ClusterClass
-  - path: variables/allowed-nodes.yaml
-    target:
-      kind: ClusterClass
-  - path: variables/control-plane-endpoint.yaml
-    target:
-      kind: ClusterClass
-  - path: variables/ipv4-config.yaml
-    target:
-      kind: ClusterClass
-  - path: variables/dns-config.yaml
-    target:
-      kind: ClusterClass
-  - path: variables/kube-proxy.yaml
-    target:
-      kind: ClusterClass
-
-  # ── Patches KubeadmControlPlaneTemplate ────────────────────────────────────
-  # Injecte : kube-vip static pod, SSH keys, kubelet provider-id
-  - path: patches/KubeadmControlPlaneTemplate/ControlPlaneSetup.yaml
-    target:
-      kind: ClusterClass
-  # Injecte : config kube-proxy en mode ipvs (si variable kubeProxy.mode=ipvs)
-  - path: patches/KubeadmControlPlaneTemplate/kube-proxy-setup.yaml
-    target:
-      kind: ClusterClass
-
-  # ── Patches KubeadmConfigTemplate (workers) ─────────────────────────────────
-  # Injecte : SSH keys workers, sélection du template par tag
-  - path: patches/KubeadmConfigTemplate/WorkerNodeSetup.yaml
-    target:
-      kind: ClusterClass
-
-  # ── Patches ProxmoxClusterTemplate ──────────────────────────────────────────
-  # Injecte : allowedNodes, controlPlaneEndpoint, dnsServers
-  - path: patches/ProxmoxClusterTemplate/ProxmoxClusterTemplateGeneral.yaml
-    target:
-      kind: ClusterClass
-
-  # ── Patches ProxmoxMachineTemplate — Control Plane ──────────────────────────
-  - path: patches/ProxmoxMachineTemplate/ControlPlaneCores.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/ControlPlaneMem.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/ControlPlaneNodeSockets.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/ControlPlaneBootDisk.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/ControlPlaneBootDiskStorage.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/ControlPlaneCloneDiskFormat.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/ControlPlaneDefaultNetwork.yaml
-    target:
-      kind: ClusterClass
-
-  # ── Patches ProxmoxMachineTemplate — Workers ────────────────────────────────
-  - path: patches/ProxmoxMachineTemplate/WorkerNodeCores.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/WorkerNodeMem.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/WorkerNodeSockets.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/WorkerNodeBootDisk.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/WorkerNodeBootDiskStorage.yaml
-    target:
-      kind: ClusterClass
-  - path: patches/ProxmoxMachineTemplate/WorkerNodeDefaultNetwork.yaml
-    target:
-      kind: ClusterClass
+  - templates/cni
+  - templates/csi
+  - templates/svc-lb

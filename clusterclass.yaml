@@ -1,28 +1,13 @@
 # =============================================================================
-# ClusterClass — le "blueprint" de cluster réutilisable
-# =============================================================================
+# ClusterClass proxmox-clusterclass-v0.2.0
 #
-# CONCEPT CAPI ClusterTopology :
-#   Un ClusterClass définit la STRUCTURE d'un cluster (control-plane, workers,
-#   infrastructure) sans les valeurs spécifiques. Les valeurs sont injectées
-#   au moment de la création d'un Cluster CR via des "variables" + "patches".
+# Variables et patches inline — plus besoin de Kustomize pour le ClusterClass.
+# Déployer avec : kubectl apply -f clusterclass.yaml
+#   (ou via kustomize pour embarquer les templates et addons en même temps)
 #
-#   Analogie : ClusterClass = classe d'objet, Cluster CR = instance.
-#
-# FLUX DE RECONCILIATION :
-#   Cluster CR (variables) ──→ ClusterClass (patches) ──→ Templates expandés
-#                                                            ↓
-#                                           CAPMOX crée des VMs sur Proxmox
-#                                           kubeadm bootstrap le cluster K8s
-#                                           HelmChartProxy installe la CNI/CSI/CCM
-#
-# SOURCE : adapté de https://github.com/Caprox-eu/Proxmox-Kubernetes-Engine (v0.0.4)
-# MODIFICATIONS : CNI remplacée par Calico (voir templates/cni/)
-#
-# VERSION KUBE-VIP : ghcr.io/kube-vip/kube-vip:v1.0.0
-#   Définie à deux endroits — mettre à jour les deux ensemble :
-#     patches/KubeadmControlPlaneTemplate/ControlPlaneSetup.yaml  → pod statique CP
-#     templates/svc-lb/sources/kube-vip-svc-lb.yaml              → DaemonSet service LB
+# Deux profils de cluster depuis ce seul ClusterClass :
+#   mgmt : 1 CP, 0 workers (spec.topology.workers.machineDeployments: [])
+#   app  : X CP, Y workers
 # =============================================================================
 ---
 apiVersion: cluster.x-k8s.io/v1beta2
@@ -31,22 +16,12 @@ metadata:
   name: proxmox-clusterclass-v0.2.0
 spec:
 
-  # ---------------------------------------------------------------------------
-  # INFRASTRUCTURE : définit quel type de "cluster infra" provisionner
-  # CAPMOX utilise ProxmoxClusterTemplate comme "factory" pour créer
-  # l'objet ProxmoxCluster de chaque instance de cluster.
-  # ---------------------------------------------------------------------------
   infrastructure:
     templateRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
       kind: ProxmoxClusterTemplate
       name: proxmox-clusterclass-v0.2.0-clustertemplate
 
-  # ---------------------------------------------------------------------------
-  # CONTROL PLANE : définit comment bootstrapper les nœuds masters
-  # KubeadmControlPlaneTemplate orchestre kubeadm init/join + kube-vip (VIP).
-  # ProxmoxMachineTemplate définit la spec VM Proxmox des nœuds CP.
-  # ---------------------------------------------------------------------------
   controlPlane:
     templateRef:
       apiVersion: controlplane.cluster.x-k8s.io/v1beta2
@@ -57,28 +32,19 @@ spec:
         apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
         kind: ProxmoxMachineTemplate
         name: proxmox-clusterclass-v0.1.1-control-plane-template
-    # Pattern de nommage des nœuds CP dans Proxmox/K8s
     naming:
       template: '{{ .cluster.name }}-control-plane-{{ .random }}'
-    # Health check : 900s pour démarrer, considéré unhealthy après 300s
-    # sans état "Ready=True" ou "Ready=Unknown"
     healthCheck:
       checks:
         nodeStartupTimeoutSeconds: 900
         unhealthyNodeConditions:
-        - status: Unknown
+        - type: Ready
+          status: Unknown
           timeoutSeconds: 300
-          type: Ready
-        - status: "False"
+        - type: Ready
+          status: "False"
           timeoutSeconds: 300
-          type: Ready
 
-  # ---------------------------------------------------------------------------
-  # WORKERS : définit les pools de nœuds workers (MachineDeployments)
-  # Un cluster peut avoir 0..N pools workers de la class "proxmox-worker".
-  # Pour un cluster sans workers séparés (masters = workers), on déclare
-  # simplement 0 replicas dans le Cluster CR.
-  # ---------------------------------------------------------------------------
   workers:
     machineDeployments:
     - class: proxmox-worker
@@ -94,44 +60,686 @@ spec:
           name: proxmox-kubernetes-engine-workertemplate
       naming:
         template: '{{ .cluster.name }}-worker-{{ .random }}'
-      # Labels automatiquement appliqués aux nœuds workers
       metadata:
         labels:
           node-role.kubernetes.io/worker: ""
           topology.kubernetes.io/region: Datacenter
-      # Auto-remediation : redémarre si ≤33% des workers sont unhealthy
       healthCheck:
         checks:
           nodeStartupTimeoutSeconds: 900
           unhealthyNodeConditions:
-          - status: Unknown
+          - type: Ready
+            status: Unknown
             timeoutSeconds: 300
-            type: Ready
-          - status: "False"
+          - type: Ready
+            status: "False"
             timeoutSeconds: 300
-            type: Ready
         remediation:
           triggerIf:
             unhealthyLessThanOrEqualTo: 33%
 
+  # ===========================================================================
+  # VARIABLES
+  # Paramètres exposés par le ClusterClass, définis dans chaque Cluster CR.
+  # ===========================================================================
+  variables:
+
   # ---------------------------------------------------------------------------
-  # VARIABLES & PATCHES : le mécanisme de paramétrage du ClusterClass
+  # cloneSpec : tout ce qui touche au clonage et aux specs des VMs Proxmox.
+  # Seul vmTemplate.templateTag est requis.
+  # Les overrides machineSpec (CPU/RAM/disk/réseau) sont tous optionnels.
   #
-  # Les variables définissent les paramètres exposés (avec leur schema JSON).
-  # Les patches injectent les valeurs de ces variables dans les templates.
-  #
-  # Ces sections sont VIDES ici et remplies via Kustomize (kustomization.yaml).
-  # Chaque fichier dans variables/ et patches/ ajoute un élément à ces listes
-  # via des JSON patches de type "op: add path: /spec/variables/-".
-  #
-  # Variables disponibles (voir variables/*.yaml) :
-  #   - cloneSpec        : spec de clonage VM (template, CPU/RAM/disk/réseau, SSH)
-  #   - controlPlaneEndpoint : IP:port du VIP kube-apiserver (ex: 192.168.40.240:6443)
-  #   - ipv4Config       : pool d'IPs des nœuds + gateway (SEULE source IPAM, voir
-  #                        variables/ipv4-config.yaml — pas d'ipPoolRef ailleurs)
-  #   - allowedNodes     : liste des nœuds Proxmox autorisés (ex: [prox-node-01])
-  #   - dnsServers       : serveurs DNS pour les VMs (ex: [192.168.40.254])
-  #   - kubeProxy        : mode kube-proxy (iptables ou ipvs)
+  # Usage type dans un Cluster CR :
+  #   variables:
+  #   - name: cloneSpec
+  #     value:
+  #       sshAuthorizedKeys: ["ecdsa-sha2-nistp256 AAAA... user@host"]
+  #       vmTemplate:
+  #         templateTag: "k8s-1-35-5"    # tag Proxmox sur la VM template source
+  #       machineSpec:
+  #         controlPlane:
+  #           numCores: 4
+  #           memoryMiB: 8192
+  #           disks:
+  #             bootVolume:
+  #               disk: scsi0
+  #               sizeGb: 30
+  #               storage: local-lvm     # storage cible sur le nœud Proxmox
   # ---------------------------------------------------------------------------
-  variables: []
-  patches: []
+  - name: cloneSpec
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        required:
+        - vmTemplate
+        properties:
+          sshAuthorizedKeys:
+            type: array
+            items:
+              type: string
+            default: []
+          virtualIPNetworkInterface:
+            type: string
+            default: ""
+            example: "vmbr0"
+          vmTemplate:
+            type: object
+            required:
+            - templateTag
+            properties:
+              templateTag:
+                type: string
+                example: "k8s-1-35-5"
+          machineSpec:
+            type: object
+            properties:
+              controlPlane: &machineSpec
+                type: object
+                properties:
+                  numCores:
+                    type: integer
+                    example: 2
+                  numSockets:
+                    type: integer
+                    example: 1
+                  memoryMiB:
+                    type: integer
+                    example: 4096
+                  format:
+                    type: string
+                    enum: [raw, qcow2, vmdk]
+                  storage:
+                    type: string
+                    default: "local-lvm"
+                  disks:
+                    type: object
+                    properties:
+                      bootVolume:
+                        type: object
+                        required:
+                        - disk
+                        - sizeGb
+                        properties:
+                          disk:
+                            type: string
+                          sizeGb:
+                            type: integer
+                            minimum: 5
+                            format: int32
+                  network:
+                    type: object
+                    required:
+                    - default
+                    properties:
+                      default:
+                        type: object
+                        required:
+                        - bridge
+                        properties:
+                          bridge:
+                            type: string
+                          model:
+                            type: string
+                            default: virtio
+                            enum: [e1000, virtio, rtl8139, vmxnet3]
+                      additionalDevices:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                          - bridge
+                          - name
+                          properties:
+                            bridge:
+                              type: string
+                            name:
+                              type: string
+                              minLength: 1
+                            model:
+                              type: string
+                              default: virtio
+                              enum: [e1000, virtio, rtl8139, vmxnet3]
+              workerNode: *machineSpec
+              loadBalancer: *machineSpec
+
+  # ---------------------------------------------------------------------------
+  # controlPlaneEndpoint : IP:port du VIP kube-apiserver (géré par kube-vip).
+  # → L'IP doit être hors du pool ipv4Config et libre sur le réseau.
+  # ---------------------------------------------------------------------------
+  - name: controlPlaneEndpoint
+    required: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+            example: "192.168.40.240"
+          port:
+            type: integer
+            default: 6443
+
+  # ---------------------------------------------------------------------------
+  # ipv4Config : pool d'adresses pour les VMs du cluster.
+  # CAPMOX génère un InClusterIPPool dédié par cluster depuis ce champ.
+  # Chaque Cluster CR doit avoir un range disjoint des autres clusters.
+  # ---------------------------------------------------------------------------
+  - name: ipv4Config
+    required: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        required:
+        - addresses
+        - gateway
+        properties:
+          addresses:
+            type: array
+            items:
+              type: string
+            example: ["192.168.40.21-192.168.40.30"]
+          gateway:
+            type: string
+            example: "192.168.40.254"
+          prefix:
+            type: integer
+            default: 24
+
+  # ---------------------------------------------------------------------------
+  # allowedNodes : nœuds Proxmox où CAPMOX peut créer des VMs (round-robin).
+  # → Pour HA (3 CP), lister ≥ 3 nœuds pour garantir la distribution.
+  # ---------------------------------------------------------------------------
+  - name: allowedNodes
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: array
+        items:
+          type: string
+        default: []
+        example: ["prox-node-01", "prox-node-02", "prox-node-03"]
+
+  # ---------------------------------------------------------------------------
+  # dnsServers : DNS injectés dans cloud-init des VMs.
+  # ---------------------------------------------------------------------------
+  - name: dnsServers
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: array
+        minItems: 1
+        items:
+          type: string
+        default: ["8.8.8.8", "1.1.1.1"]
+        example: ["192.168.40.254"]
+
+  # ---------------------------------------------------------------------------
+  # kubeProxy : mode du proxy réseau.
+  # ipvs offre de meilleures perfs avec beaucoup de Services (>1000).
+  # Pour un homelab, iptables (défaut) est suffisant.
+  # ---------------------------------------------------------------------------
+  - name: kubeProxy
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          mode:
+            type: string
+            default: "iptables"
+            enum: ["iptables", "ipvs"]
+
+  # ===========================================================================
+  # PATCHES
+  # Règles d'injection des variables dans les Templates au moment de la
+  # création d'un Cluster CR. Équivalent des {{ .Values.foo }} dans Helm.
+  # ===========================================================================
+  patches:
+
+  # ---------------------------------------------------------------------------
+  # ProxmoxCluster : endpoint VIP, pool IP, DNS, nœuds autorisés
+  # ---------------------------------------------------------------------------
+  - name: ProxmoxClusterTemplateGeneral
+    description: "Configure ProxmoxCluster : VIP, pool IPv4, DNS, allowedNodes"
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxClusterTemplate
+        matchResources:
+          infrastructureCluster: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/allowedNodes
+        valueFrom:
+          variable: allowedNodes
+      - op: add
+        path: /spec/template/spec/controlPlaneEndpoint/host
+        valueFrom:
+          variable: controlPlaneEndpoint.host
+      - op: add
+        path: /spec/template/spec/controlPlaneEndpoint/port
+        valueFrom:
+          variable: controlPlaneEndpoint.port
+      - op: replace
+        path: /spec/template/spec/dnsServers
+        valueFrom:
+          variable: dnsServers
+      - op: replace
+        path: /spec/template/spec/ipv4Config/addresses
+        valueFrom:
+          variable: ipv4Config.addresses
+      - op: replace
+        path: /spec/template/spec/ipv4Config/gateway
+        valueFrom:
+          variable: ipv4Config.gateway
+      - op: replace
+        path: /spec/template/spec/ipv4Config/prefix
+        valueFrom:
+          variable: ipv4Config.prefix
+
+  # ---------------------------------------------------------------------------
+  # Control Plane — configuration principale
+  # Injecte : SSH keys, kube-vip static pod manifest, tag template Proxmox
+  #
+  # VERSION KUBE-VIP : ghcr.io/kube-vip/kube-vip:v1.0.0
+  # Aussi présente dans templates/svc-lb/sources/kube-vip-svc-lb.yaml
+  # → mettre à jour les deux ensemble.
+  # ---------------------------------------------------------------------------
+  - name: ControlPlaneSetup
+    description: "Configure CP : SSH keys, kube-vip static pod, tag template"
+    definitions:
+    - selector:
+        apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+        kind: KubeadmControlPlaneTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/users
+        valueFrom:
+          template: |
+            - name: root
+              sshAuthorizedKeys: {{ .cloneSpec.sshAuthorizedKeys }}
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/files/-
+        valueFrom:
+          template: |
+            owner: root:root
+            path: /etc/kubernetes/manifests/kube-vip.yaml
+            content: |
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: kube-vip
+                namespace: kube-system
+              spec:
+                containers:
+                - args:
+                  - manager
+                  env:
+                  - name: vip_arp
+                    value: "true"
+                  - name: port
+                    value: "6443"
+                  - name: vip_nodename
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: spec.nodeName
+                  - name: vip_interface
+                    value: "{{ .cloneSpec.virtualIPNetworkInterface }}"
+                  - name: vip_subnet
+                    value: "32"
+                  - name: dns_mode
+                    value: first
+                  - name: cp_enable
+                    value: "true"
+                  - name: cp_namespace
+                    value: kube-system
+                  - name: svc_leasename
+                    value: plndr-svcs-lock
+                  - name: address
+                    value: "{{ .controlPlaneEndpoint.host }}"
+                  image: ghcr.io/kube-vip/kube-vip:v1.0.0
+                  imagePullPolicy: IfNotPresent
+                  name: kube-vip
+                  resources: {}
+                  securityContext:
+                    capabilities:
+                      add:
+                      - NET_ADMIN
+                      - NET_RAW
+                      drop:
+                      - ALL
+                  volumeMounts:
+                  - mountPath: /etc/kubernetes/admin.conf
+                    name: kubeconfig
+                hostAliases:
+                - hostnames:
+                  - kubernetes
+                  ip: 127.0.0.1
+                hostNetwork: true
+                volumes:
+                - hostPath:
+                    path: /etc/kubernetes/admin.conf
+                  name: kubeconfig
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: replace
+        path: /spec/template/spec/templateSelector/matchTags
+        valueFrom:
+          template: |
+            [ "{{ .cloneSpec.vmTemplate.templateTag }}" ]
+
+  # ---------------------------------------------------------------------------
+  # kube-proxy ipvs (optionnel — activé si kubeProxy.mode=ipvs)
+  # ---------------------------------------------------------------------------
+  - name: kube-proxy-setup
+    description: "Active kube-proxy en mode ipvs (optionnel)"
+    enabledIf: '{{ if eq .kubeProxy.mode "ipvs" }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+        kind: KubeadmControlPlaneTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/files/-
+        valueFrom:
+          template: |
+            content: |
+              #/bin/sh
+              cat >> /run/kubeadm/kubeadm.yaml <<EOF
+              ---
+              apiVersion: kubeproxy.config.k8s.io/v1alpha1
+              kind: KubeProxyConfiguration
+              mode: "ipvs"
+              ipvs:
+                strictARP: true
+              EOF
+            owner: root:root
+            permissions: "0755"
+            path: /tmp/kube-proxy.sh
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+        value: /tmp/kube-proxy.sh
+
+  # ---------------------------------------------------------------------------
+  # Workers — configuration principale
+  # Injecte : SSH keys, tag template Proxmox
+  # ---------------------------------------------------------------------------
+  - name: WorkerNodeSetup
+    description: "Configure Workers : SSH keys, tag template"
+    definitions:
+    - selector:
+        apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+        kind: KubeadmConfigTemplate
+        matchResources:
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/users
+        valueFrom:
+          template: |
+            - name: root
+              sshAuthorizedKeys: {{ .cloneSpec.sshAuthorizedKeys }}
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: false
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: replace
+        path: /spec/template/spec/templateSelector/matchTags
+        valueFrom:
+          template: |
+            [ "{{ .cloneSpec.vmTemplate.templateTag }}" ]
+
+  # ---------------------------------------------------------------------------
+  # Overrides VM Control Plane (tous optionnels via enabledIf)
+  # ---------------------------------------------------------------------------
+  - name: ControlPlaneCores
+    description: "Override CPU cores CP"
+    enabledIf: '{{ if .cloneSpec.machineSpec.controlPlane.numCores }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/numCores
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.numCores
+
+  - name: ControlPlaneMem
+    description: "Override RAM (MiB) CP"
+    enabledIf: '{{ if .cloneSpec.machineSpec.controlPlane.memoryMiB }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/memoryMiB
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.memoryMiB
+
+  - name: ControlPlaneNodeSockets
+    description: "Override sockets CP"
+    enabledIf: '{{ if .cloneSpec.machineSpec.controlPlane.numSockets }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/numSockets
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.numSockets
+
+  - name: ControlPlaneBootDisk
+    description: "Override disque boot CP (device + taille)"
+    enabledIf: '{{ if .cloneSpec.machineSpec.controlPlane.disks.bootVolume.sizeGb }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/disks
+        value: {}
+      - op: add
+        path: /spec/template/spec/disks/bootVolume
+        value: {}
+      - op: add
+        path: /spec/template/spec/disks/bootVolume/disk
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.disks.bootVolume.disk
+      - op: add
+        path: /spec/template/spec/disks/bootVolume/sizeGb
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.disks.bootVolume.sizeGb
+
+  - name: ControlPlaneBootDiskStorage
+    description: "Override storage cible CP (ex: local-lvm)"
+    enabledIf: '{{ if .cloneSpec.machineSpec.controlPlane.storage }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/storage
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.storage
+
+  - name: ControlPlaneCloneDiskFormat
+    description: "Override format disque CP (qcow2/raw/vmdk)"
+    enabledIf: '{{ if .cloneSpec.machineSpec.controlPlane.format }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: replace
+        path: /spec/template/spec/format
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.format
+
+  - name: ControlPlaneDefaultNetwork
+    description: "Override réseau CP (bridge, model)"
+    enabledIf: '{{ if .cloneSpec.machineSpec.controlPlane.network }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/network
+        valueFrom:
+          variable: cloneSpec.machineSpec.controlPlane.network
+
+  # ---------------------------------------------------------------------------
+  # Overrides VM Workers (tous optionnels via enabledIf)
+  # ---------------------------------------------------------------------------
+  - name: WorkerNodeCores
+    description: "Override CPU cores workers"
+    enabledIf: '{{ if .cloneSpec.machineSpec.workerNode.numCores }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: false
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/numCores
+        valueFrom:
+          variable: cloneSpec.machineSpec.workerNode.numCores
+
+  - name: WorkerNodeMem
+    description: "Override RAM (MiB) workers"
+    enabledIf: '{{ if .cloneSpec.machineSpec.workerNode.memoryMiB }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: false
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/memoryMiB
+        valueFrom:
+          variable: cloneSpec.machineSpec.workerNode.memoryMiB
+
+  - name: WorkerNodeSockets
+    description: "Override sockets workers"
+    enabledIf: '{{ if .cloneSpec.machineSpec.workerNode.numSockets }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: false
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/numSockets
+        valueFrom:
+          variable: cloneSpec.machineSpec.workerNode.numSockets
+
+  - name: WorkerNodeBootDisk
+    description: "Override disque boot workers (device + taille)"
+    enabledIf: '{{ if .cloneSpec.machineSpec.workerNode.disks.bootVolume.sizeGb }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: false
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/disks
+        value: {}
+      - op: add
+        path: /spec/template/spec/disks/bootVolume
+        value: {}
+      - op: add
+        path: /spec/template/spec/disks/bootVolume/disk
+        valueFrom:
+          variable: cloneSpec.machineSpec.workerNode.disks.bootVolume.disk
+      - op: add
+        path: /spec/template/spec/disks/bootVolume/sizeGb
+        valueFrom:
+          variable: cloneSpec.machineSpec.workerNode.disks.bootVolume.sizeGb
+
+  - name: WorkerNodeBootDiskStorage
+    description: "Override storage cible workers (ex: local-lvm)"
+    enabledIf: '{{ if .cloneSpec.machineSpec.workerNode.storage }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: false
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/storage
+        valueFrom:
+          variable: cloneSpec.machineSpec.workerNode.storage
+
+  - name: WorkerNodeDefaultNetwork
+    description: "Override réseau workers (bridge, model)"
+    enabledIf: '{{ if .cloneSpec.machineSpec.workerNode.network }}true{{ end }}'
+    definitions:
+    - selector:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ProxmoxMachineTemplate
+        matchResources:
+          controlPlane: false
+          machineDeploymentClass:
+            names:
+            - proxmox-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/network
+        valueFrom:
+          variable: cloneSpec.machineSpec.workerNode.network
