@@ -40,10 +40,10 @@ spec:
         unhealthyNodeConditions:
         - type: Ready
           status: Unknown
-          timeoutSeconds: 300
+          timeoutSeconds: 600
         - type: Ready
           status: "False"
-          timeoutSeconds: 300
+          timeoutSeconds: 600
 
   workers:
     machineDeployments:
@@ -70,10 +70,10 @@ spec:
           unhealthyNodeConditions:
           - type: Ready
             status: Unknown
-            timeoutSeconds: 300
+            timeoutSeconds: 600
           - type: Ready
             status: "False"
-            timeoutSeconds: 300
+            timeoutSeconds: 600
         remediation:
           triggerIf:
             unhealthyLessThanOrEqualTo: 33%
