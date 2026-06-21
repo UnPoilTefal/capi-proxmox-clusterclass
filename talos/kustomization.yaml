@@ -1,20 +1,18 @@
 # =============================================================================
-# Kustomize — ClusterClass Talos
+# Kustomize — ClusterClass Talos (placeholder)
 #
-# Prévisualiser :  kubectl kustomize talos/
+# TalosControlPlaneTemplate n'est PAS implémenté dans CACPPT v0.5.x (dernière
+# release : v0.5.13). La ClusterClass Talos est donc impossible avec ce provider.
 #
-# Note : les addons CNI/CSI/kube-vip svc-lb ne sont PAS dupliqués ici.
-# Ils sont déployés une seule fois via kubeadm-ubuntu/ et ciblent tous les
-# clusters portant les labels caprox.eu/cni, caprox.eu/ccm, etc.
+# Le cluster app-talos utilise des manifestes standalone dans :
+#   capi-bootstrap/clusters/app-talos/cluster.yaml
+#
+# Les fichiers talos/ sont conservés comme référence pour le jour où CACPPT
+# ajoutera TalosControlPlaneTemplate (ou pour une migration vers un fork).
+# clusterclass.yaml et talos-control-plane-template.yaml sont EXCLUS ici.
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: caprox-kubernetes-engine
 
-resources:
-  - clusterclass.yaml
-  - templates/talos-config-template.yaml
-  - templates/talos-control-plane-template.yaml
-  - templates/proxmox-cluster-template.yaml
-  - templates/proxmox-machine-template-cp.yaml
-  - templates/proxmox-machine-template-worker.yaml
+resources: []

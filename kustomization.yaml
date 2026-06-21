@@ -7,7 +7,9 @@
 # Structure :
 #   ns.yaml           → namespace partagé caprox-kubernetes-engine
 #   kubeadm-ubuntu/   → ClusterClass kubeadm + Ubuntu 26.04
-#   talos/            → ClusterClass Talos Linux (proxmox-talos-clusterclass-v0.1.0)
+#   talos/            → ClusterClass Talos (désactivé : TalosControlPlaneTemplate
+#                       n'est pas implémentée dans CACPPT v0.5.x ; utiliser
+#                       TalosControlPlane standalone dans clusters/app-talos/)
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -15,4 +17,3 @@ kind: Kustomization
 resources:
   - ns.yaml
   - kubeadm-ubuntu/
-  - talos/
